@@ -10,7 +10,7 @@ void startup_log_open(void)
 {
     sceKernelMkdir("/data/steam-remote-ps4", 0700);
     log_fd = sceKernelOpen("/data/steam-remote-ps4/startup.log", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-    startup_log_step("Steam Remote Play PS4 0.2.10: main entered");
+    startup_log_step("Steam Remote Play PS4 0.2.6: main entered");
 }
 
 bool startup_log_available(void)
