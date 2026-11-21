@@ -28,7 +28,7 @@ HW profiles use the PS4 system module `libSceVideodec2` for H.264 and fall back 
 
 Open display calibration with **OPTIONS** in the host list or **L3 + R3** during a stream. Use **L1** to select the top-left corner, **R1** to select the bottom-right corner, and the D-pad to move the selected corner. Press **Triangle** to switch between **Fill**, which crops to fill the area while preserving aspect ratio, and **Fit**, which shows the entire frame and may leave black bars.
 
-Version 0.2.3 defaults to **Fill**. Press **Square** to restore full-screen defaults, **Cross** to save, or **Circle** to exit without saving.
+Version 0.2.4 defaults to **Fit** and applies it automatically as the incoming frame changes aspect ratio. Upgrades switch older configurations to Fit while retaining calibration within the display bounds. A 16:9 stream fills a 16:9 screen, while ultrawide frames may have black bars above and below. Press **Square** to restore full-screen defaults, **Cross** to save, or **Circle** to exit without saving.
 
 ## Diagnostics
 

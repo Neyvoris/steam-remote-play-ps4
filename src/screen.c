@@ -34,7 +34,7 @@ static int clamp(int value, int min, int max)
 
 ScreenArea screen_area_default(void)
 {
-    return (ScreenArea){.right = SCREEN_WIDTH, .bottom = SCREEN_HEIGHT, .fill = true};
+    return (ScreenArea){.right = SCREEN_WIDTH, .bottom = SCREEN_HEIGHT};
 }
 
 ScreenArea screen_area_load(void)
@@ -46,16 +46,14 @@ ScreenArea screen_area_load(void)
     int fields = fscanf(file, "%1u %5d %5d %5d %5d %1u", &version, &saved.left, &saved.top,
                         &saved.right, &saved.bottom, &fill);
     fclose(file);
-    if (fields != 6 || (version != 1 && version != 2 && version != 3) || fill > 1 ||
+    if (fields != 6 || (version < 1 || version > 4) || fill > 1 ||
         saved.left < -SCREEN_LIMIT_X || saved.top < -SCREEN_LIMIT_Y ||
         saved.right > SCREEN_WIDTH + SCREEN_LIMIT_X || saved.bottom > SCREEN_HEIGHT + SCREEN_LIMIT_Y ||
         saved.left > SCREEN_LIMIT_X || saved.top > SCREEN_LIMIT_Y ||
         saved.right < SCREEN_WIDTH - SCREEN_LIMIT_X || saved.bottom < SCREEN_HEIGHT - SCREEN_LIMIT_Y)
         return screen_area_default();
-    /* Migrate the old full-screen Fit default once. Preserve calibrated bounds. */
-    const bool full_screen = saved.left == 0 && saved.top == 0 &&
-                             saved.right == SCREEN_WIDTH && saved.bottom == SCREEN_HEIGHT;
-    screen_area_set_fill(&saved, fill != 0 || (version < 3 && full_screen));
+    /* Start older configurations in Fit to avoid cropping on upgrade. */
+    screen_area_set_fill(&saved, version == 4 && fill != 0);
     return saved;
 }
 
@@ -63,7 +61,7 @@ bool screen_area_save(ScreenArea area)
 {
     FILE *file = fopen(area_temp, "w");
     if (!file) return false;
-    bool ok = fprintf(file, "3 %d %d %d %d %u\n", area.left, area.top, area.right, area.bottom,
+    bool ok = fprintf(file, "4 %d %d %d %d %u\n", area.left, area.top, area.right, area.bottom,
                       (unsigned)area.fill) > 0;
     if (fclose(file) != 0) ok = false;
     if (ok && rename(area_temp, area_path) == 0) return true;
@@ -325,7 +323,7 @@ void screen_host_menu(const char *status, const char *host, const char *detail, 
     rect(fb, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0xff181319);
     rect(fb, 72, 76, 7, 52, 0xffe180b6);
     text(fb, 104, 80, 5, white, "Steam Remote Play");
-    text(fb, 1020, 100, 2, dim, "0.2.3");
+    text(fb, 1020, 100, 2, dim, "0.2.4");
     rect(fb, 72, 183, 1136, 365, 0xff302534);
     text(fb, 106, 217, 4, lavender, status);
     text(fb, 106, 303, 3, white, host);
