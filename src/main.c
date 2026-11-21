@@ -4,6 +4,7 @@
 #include "platform.h"
 #include "screen.h"
 #include "startup.h"
+#include "updates.h"
 #include <orbis/Net.h>
 #include <orbis/libkernel.h>
 #include <inttypes.h>
@@ -570,6 +571,12 @@ static void menu(IHS_Client *client, const IHS_ClientConfig *config)
 
         if (phase == BROWSING) {
             if (pressed & ORBIS_PAD_BUTTON_CIRCLE) return;
+            if (pressed & ORBIS_PAD_BUTTON_L1) {
+                screen_menu("Checking updates", "", "Contacting GitHub.");
+                updates_check(status, sizeof(status));
+                next_draw = 0;
+                continue;
+            }
             if (pressed & ORBIS_PAD_BUTTON_R1) {
                 video_profile = (video_profile + 1) % PROFILE_COUNT;
                 if (!save_profile(video_profile))
@@ -683,7 +690,7 @@ static void menu(IHS_Client *client, const IHS_ClientConfig *config)
                 screen_host_menu("Choose a Steam PC", label, detail, profiles[video_profile].label);
             } else {
                 screen_host_menu("Looking for Steam", "Waiting for a PC on this network",
-                                 "Enable Steam Remote Play. OPTIONS: screen size.", profiles[video_profile].label);
+                                 status[0] ? status : "Enable Steam Remote Play on your PC.", profiles[video_profile].label);
             }
             next_draw = now + 80000;
         }

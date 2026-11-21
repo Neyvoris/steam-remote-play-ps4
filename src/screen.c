@@ -347,7 +347,7 @@ void screen_host_menu(const char *status, const char *host, const char *detail, 
     rect(fb, 0, 140, SCREEN_WIDTH, 4, 0xff4d3524);
     rect(fb, 64, 55, 8, 46, blue);
     text(fb, 92, 56, 4, white, "Steam Remote Play");
-    text(fb, 1024, 70, 2, muted, "PS4  0.2.5");
+    text(fb, 1024, 70, 2, muted, "PS4  0.2.6");
 
     rect(fb, 64, 182, 1152, 367, 0xff3d2b1d);
     rect(fb, 64, 182, 1152, 3, blue);
@@ -371,9 +371,9 @@ void screen_host_menu(const char *status, const char *host, const char *detail, 
     rect(fb, 0, 581, SCREEN_WIDTH, 139, 0xff1b130d);
     if (selecting) {
         text(fb, 64, 611, 2, white, "D-PAD Select    CROSS Connect    SQUARE Pair again");
-        text(fb, 64, 647, 2, muted, "OPTIONS Screen size    CIRCLE Exit");
+        text(fb, 64, 647, 2, muted, "L1 Check updates    OPTIONS Screen size    CIRCLE Exit");
     } else if (profile) {
-        text(fb, 64, 611, 2, muted, "OPTIONS Screen size    CIRCLE Exit");
+        text(fb, 64, 611, 2, muted, "L1 Check updates    OPTIONS Screen size    CIRCLE Exit");
     } else if (strcmp(status, "Connecting") == 0 || strcmp(status, "Opening Big Picture") == 0 ||
                strncmp(status, "PIN:", 4) == 0) {
         text(fb, 64, 611, 2, muted, "CIRCLE Cancel");

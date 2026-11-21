@@ -32,10 +32,10 @@ set(OPUS_BUILD_TESTING OFF CACHE BOOL "" FORCE)
 set(OPUS_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
 add_subdirectory("${DEPS}/opus" opus EXCLUDE_FROM_ALL)
 
-add_executable(steam-remote-ps4.elf src/main.c src/screen.c src/media.c src/ps4_video.c src/gamepad.c src/startup.c)
+add_executable(steam-remote-ps4.elf src/main.c src/screen.c src/media.c src/ps4_video.c src/gamepad.c src/startup.c src/updates.c)
 target_include_directories(steam-remote-ps4.elf PRIVATE "${FFMPEG}/include" "${IHS}/src")
 target_compile_options(steam-remote-ps4.elf PRIVATE -Wall -Wextra)
 target_link_libraries(steam-remote-ps4.elf PRIVATE ihs crypto opus
     "${FFMPEG}/lib/libavcodec.a" "${FFMPEG}/lib/libavutil.a"
     -lSceNet -lSceVideoOut -lSceGnmDriver -lScePad -lSceUserService
-    -lSceSysmodule -lSceAudioOut)
+    -lSceSysmodule -lSceAudioOut -lSceHttp -lSceSsl)
