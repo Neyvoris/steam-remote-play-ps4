@@ -29,6 +29,27 @@ static atomic_uint_fast64_t decode_us;
 static atomic_uint_fast64_t host_framerate;
 static atomic_uint host_framerate_limits;
 static uint64_t render_us;
+/* Keep scaling and repeated-row reads in cacheable memory. */
+_Alignas(64) static uint32_t render_buffer[VIDEO_WIDTH * VIDEO_HEIGHT];
+
+static void copy_to_display(uint32_t *dest, size_t count)
+{
+    if ((uintptr_t)dest & 15) {
+        memcpy(dest, render_buffer, count * sizeof(*dest));
+        return;
+    }
+    size_t i = 0;
+    for (; i + 16 <= count; i += 16) {
+        const __m128i *source = (const __m128i *)(render_buffer + i);
+        __m128i *target = (__m128i *)(dest + i);
+        _mm_stream_si128(target, _mm_load_si128(source));
+        _mm_stream_si128(target + 1, _mm_load_si128(source + 1));
+        _mm_stream_si128(target + 2, _mm_load_si128(source + 2));
+        _mm_stream_si128(target + 3, _mm_load_si128(source + 3));
+    }
+    if (i < count) memcpy(dest + i, render_buffer + i, (count - i) * sizeof(*dest));
+    _mm_sfence();
+}
 static unsigned render_attempts;
 static uint64_t session_identity, presentation_serial, previous_present_us;
 static bool prefer_hardware;
@@ -515,11 +536,14 @@ bool media_present(ScreenArea area, const ScreenCalibration *calibration, bool r
     IHS_FrameTicket *ticket = frame_pending ? frame_ticket(display_frame) : NULL;
     const uint64_t upload_start = ticket ? frame_clock_us() : 0;
     uint64_t start = sceKernelGetProcessTime();
-    render_image(pixels, display_frame, area);
+    render_image(render_buffer, display_frame, area);
     render_us += sceKernelGetProcessTime() - start;
     ++render_attempts;
-    if (calibration) screen_calibration_overlay(pixels, calibration);
-    if (diagnostics) screen_diagnostics_overlay(pixels, diagnostics);
+    if (calibration) screen_calibration_overlay(render_buffer, calibration);
+    if (diagnostics) screen_diagnostics_overlay(render_buffer, diagnostics);
+    int width, height;
+    screen_output_size(&width, &height);
+    copy_to_display(pixels, (size_t)width * height);
     const uint64_t upload_end = ticket ? frame_clock_us() : 0;
     int result = screen_present();
     if (result < 0) {

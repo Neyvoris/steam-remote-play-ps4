@@ -314,7 +314,7 @@ void screen_host_menu(const char *status, const char *host, const char *detail, 
     rect(fb, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0xff181319);
     rect(fb, 72, 76, 7, 52, 0xffe180b6);
     text(fb, 104, 80, 5, white, "Steam Remote Play");
-    text(fb, 1020, 100, 2, dim, "0.2.1");
+    text(fb, 1020, 100, 2, dim, "0.2.2");
     rect(fb, 72, 183, 1136, 365, 0xff302534);
     text(fb, 106, 217, 4, lavender, status);
     text(fb, 106, 303, 3, white, host);
