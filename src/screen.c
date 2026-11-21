@@ -3,6 +3,7 @@
 #include "startup.h"
 #include <stddef.h>
 #include <stdio.h>
+#include <string.h>
 #include "font8x8.h"
 #include <orbis/VideoOut.h>
 #include <orbis/GnmDriver.h>
@@ -277,7 +278,7 @@ void screen_calibration_overlay(uint32_t *fb, const ScreenCalibration *calibrati
 {
     const ScreenArea area = calibration->area;
     const int width = area.right - area.left, height = area.bottom - area.top;
-    const uint32_t border = 0xfff9f5ff, accent = 0xfffea8d3;
+    const uint32_t border = 0xfffff5e8, accent = 0xffffc266;
     rect(fb, area.left, area.top, width, 4, border);
     rect(fb, area.left, area.bottom - 4, width, 4, border);
     rect(fb, area.left, area.top, 4, height, border);
@@ -289,7 +290,7 @@ void screen_calibration_overlay(uint32_t *fb, const ScreenCalibration *calibrati
         rect(fb, area.left, area.top, 38, 8, accent);
         rect(fb, area.left, area.top, 8, 38, accent);
     }
-    rect(fb, 196, 231, 888, 258, 0xff181319);
+    rect(fb, 196, 231, 888, 258, 0xff231911);
     text(fb, 224, 257, 4, border, "Screen size");
     char detail[56];
     snprintf(detail, sizeof(detail), "%s: %d, %d    Mode: %s",
@@ -309,30 +310,73 @@ bool screen_calibration_preview(const ScreenCalibration *calibration)
     uint32_t *fb = screen_pixels();
     if (!fb) return false;
     const ScreenArea area = calibration->area;
-    rect(fb, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0xff181319);
-    rect(fb, area.left, area.top, area.right - area.left, area.bottom - area.top, 0xff302534);
+    rect(fb, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0xff231911);
+    rect(fb, area.left, area.top, area.right - area.left, area.bottom - area.top, 0xff422d1c);
     screen_calibration_overlay(fb, calibration);
     return screen_present() >= 0;
+}
+
+static void menu_detail(uint32_t *fb, int x, int y, const char *message)
+{
+    enum { LINE_CHARS = 59 };
+    for (int line = 0; line < 3 && *message; ++line) {
+        char buffer[LINE_CHARS + 1];
+        size_t visible = strlen(message);
+        if (visible > LINE_CHARS) {
+            visible = LINE_CHARS;
+            while (visible > 0 && message[visible] != ' ') --visible;
+            if (!visible) visible = LINE_CHARS;
+        }
+        memcpy(buffer, message, visible);
+        buffer[visible] = 0;
+        text(fb, x, y + line * 27, 2, 0xffdcc8ad, buffer);
+        message += visible;
+        while (*message == ' ') ++message;
+    }
 }
 
 void screen_host_menu(const char *status, const char *host, const char *detail, const char *profile)
 {
     uint32_t *fb = screen_pixels();
     if (!fb) return;
-    const uint32_t white = 0xfff9f5ff, lavender = 0xfffea8d3, dim = 0xffc2afaa;
-    rect(fb, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0xff181319);
-    rect(fb, 72, 76, 7, 52, 0xffe180b6);
-    text(fb, 104, 80, 5, white, "Steam Remote Play");
-    text(fb, 1020, 100, 2, dim, "0.2.4");
-    rect(fb, 72, 183, 1136, 365, 0xff302534);
-    text(fb, 106, 217, 4, lavender, status);
-    text(fb, 106, 303, 3, white, host);
-    text(fb, 106, 392, 2, dim, detail);
-    text(fb, 72, 598, 2, dim, "UP/DOWN  PC     CROSS  Connect     CIRCLE  Back / Exit");
+
+    const uint32_t white = 0xfffff5e8, blue = 0xffffc266, muted = 0xffdcc8ad;
+    const bool selecting = profile && strcmp(status, "Choose a Steam PC") == 0;
+    rect(fb, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0xff231911);
+    rect(fb, 0, 0, SCREEN_WIDTH, 144, 0xff352518);
+    rect(fb, 0, 140, SCREEN_WIDTH, 4, 0xff4d3524);
+    rect(fb, 64, 55, 8, 46, blue);
+    text(fb, 92, 56, 4, white, "Steam Remote Play");
+    text(fb, 1024, 70, 2, muted, "PS4  0.2.5");
+
+    rect(fb, 64, 182, 1152, 367, 0xff3d2b1d);
+    rect(fb, 64, 182, 1152, 3, blue);
+    text(fb, 96, 215, 3, blue, status);
+
+    if (*host) {
+        rect(fb, 96, 271, 1088, 76, 0xff563e29);
+        rect(fb, 96, 271, 5, 76, blue);
+        char name[44];
+        snprintf(name, sizeof(name), "%.43s", host);
+        text(fb, 121, 295, 2, white, name);
+    }
+    menu_detail(fb, 96, *host ? 377 : 283, detail);
+
     if (profile) {
-        char hint[56];
-        snprintf(hint, sizeof(hint), "R1  Video mode: %s", profile);
-        text(fb, 72, 636, 2, white, hint);
+        rect(fb, 96, 476, 1088, 48, 0xff302217);
+        text(fb, 115, 492, 2, blue, "R1");
+        text(fb, 176, 492, 2, white, profile);
+    }
+
+    rect(fb, 0, 581, SCREEN_WIDTH, 139, 0xff1b130d);
+    if (selecting) {
+        text(fb, 64, 611, 2, white, "D-PAD Select    CROSS Connect    SQUARE Pair again");
+        text(fb, 64, 647, 2, muted, "OPTIONS Screen size    CIRCLE Exit");
+    } else if (profile) {
+        text(fb, 64, 611, 2, muted, "OPTIONS Screen size    CIRCLE Exit");
+    } else if (strcmp(status, "Connecting") == 0 || strcmp(status, "Opening Big Picture") == 0 ||
+               strncmp(status, "PIN:", 4) == 0) {
+        text(fb, 64, 611, 2, muted, "CIRCLE Cancel");
     }
     (void)screen_present();
 }
