@@ -1,0 +1,28 @@
+--- a/include/ihslib/client.h
++++ b/include/ihslib/client.h
+@@ -86,6 +86,9 @@
+         int32_t y;
+     } maxResolution;
+     int32_t audioChannelCount;
++    /** Capture limit as a rational number. Set both fields to send it. */
++    int32_t maxFramerateNumerator;
++    int32_t maxFramerateDenominator;
+     IHS_StreamInterface streamingInterface;
+     /**
+      * Stream the host's whole desktop. When false the host streams its game /
+--- a/src/client/streaming.c
++++ b/src/client/streaming.c
+@@ -293,6 +293,13 @@
+     message.has_maximum_resolution_y = request.maxResolution.y > 0;
+     message.maximum_resolution_y = request.maxResolution.y;
+ 
++    if (request.maxFramerateNumerator > 0 && request.maxFramerateDenominator > 0) {
++        message.has_maximum_framerate_numerator = true;
++        message.maximum_framerate_numerator = request.maxFramerateNumerator;
++        message.has_maximum_framerate_denominator = true;
++        message.maximum_framerate_denominator = request.maxFramerateDenominator;
++    }
++
+     message.has_enable_audio_streaming = true;
+     message.enable_audio_streaming = request.streamingEnable.audio;
+ 

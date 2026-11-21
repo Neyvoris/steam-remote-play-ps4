@@ -1,0 +1,41 @@
+cmake_minimum_required(VERSION 3.16)
+project(SteamRemotePlayPS4 C)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(DEPS "$ENV{PS4_DEPS}" CACHE PATH "Pinned source and FFmpeg dependency directory")
+set(IHS "${DEPS}/ihslib-stream")
+set(PROTO "${DEPS}/protobuf-c-1.5.2")
+set(FFMPEG "${DEPS}/ffmpeg-ps4-simd")
+foreach(required "${IHS}/src/base.c" "${PROTO}/protobuf-c/protobuf-c.c" "${FFMPEG}/lib/libavcodec.a")
+    if(NOT EXISTS "${required}")
+        message(FATAL_ERROR "Missing ${required}. Run scripts/dependencies.sh.")
+    endif()
+endforeach()
+
+file(GLOB_RECURSE IHS_SOURCES CONFIGURE_DEPENDS "${IHS}/src/*.c")
+list(FILTER IHS_SOURCES EXCLUDE REGEX "/hid/sdl/|/platforms/ihs_(thread|udp)_.*[.]c$|/crypto/impl_openssl[.]c$")
+add_library(ihs STATIC ${IHS_SOURCES} "${PROTO}/protobuf-c/protobuf-c.c" src/platform.c)
+target_include_directories(ihs PUBLIC "${IHS}/include" PRIVATE "${IHS}/src" "${IHS}/src/protobuf" "${PROTO}" "${DEPS}/mbedtls/include")
+target_compile_options(ihs PRIVATE -ffunction-sections -fdata-sections)
+target_compile_definitions(ihs PRIVATE MBEDTLS_USER_CONFIG_FILE="orbis_entropy.h")
+target_include_directories(ihs PRIVATE src)
+
+file(GLOB MBED_SOURCES CONFIGURE_DEPENDS "${DEPS}/mbedtls/library/*.c")
+list(FILTER MBED_SOURCES EXCLUDE REGEX "/psa_crypto_storage[.]c$")
+add_library(crypto STATIC ${MBED_SOURCES})
+target_include_directories(crypto PRIVATE "${DEPS}/mbedtls/include" src)
+target_compile_definitions(crypto PRIVATE MBEDTLS_USER_CONFIG_FILE="orbis_entropy.h")
+target_compile_options(crypto PRIVATE -ffunction-sections -fdata-sections)
+
+set(OPUS_STACK_PROTECTOR OFF CACHE BOOL "" FORCE)
+set(OPUS_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(OPUS_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+add_subdirectory("${DEPS}/opus" opus EXCLUDE_FROM_ALL)
+
+add_executable(steam-remote-ps4.elf src/main.c src/screen.c src/media.c src/ps4_video.c src/gamepad.c src/startup.c)
+target_include_directories(steam-remote-ps4.elf PRIVATE "${FFMPEG}/include" "${IHS}/src")
+target_compile_options(steam-remote-ps4.elf PRIVATE -Wall -Wextra)
+target_link_libraries(steam-remote-ps4.elf PRIVATE ihs crypto opus
+    "${FFMPEG}/lib/libavcodec.a" "${FFMPEG}/lib/libavutil.a"
+    -lSceNet -lSceVideoOut -lSceGnmDriver -lScePad -lSceUserService
+    -lSceSysmodule -lSceAudioOut)

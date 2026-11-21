@@ -1,0 +1,21 @@
+--- a/include/ihslib/session.h
++++ b/include/ihslib/session.h
+@@ -57,6 +57,7 @@
+     uint32_t maxFps;
+     uint32_t maxBitrateKbps;
+     IHS_StreamQuality quality;
++    bool enableHardwareDecoding;
+ } IHS_SessionConfig;
+ 
+ /** Optional platform/decoder facts. Unknown fields are omitted from the wire.
+--- a/src/session/channels/ch_control_negotiation.c
++++ b/src/session/channels/ch_control_negotiation.c
+@@ -197,7 +197,7 @@
+     PROTOBUF_C_SET_VALUE(clientConfig, desired_resolution_x, (int32_t) ihsConf.maxWidth);
+     PROTOBUF_C_SET_VALUE(clientConfig, desired_resolution_y, (int32_t) ihsConf.maxHeight);
+     PROTOBUF_C_SET_VALUE(clientConfig, enable_input_streaming, true);
+-    PROTOBUF_C_SET_VALUE(clientConfig, enable_hardware_decoding, true);
++    PROTOBUF_C_SET_VALUE(clientConfig, enable_hardware_decoding, ihsConf.enableHardwareDecoding);
+     PROTOBUF_C_SET_VALUE(clientConfig, enable_performance_overlay, true);
+     if (ihsConf.enableAudio) {
+         PROTOBUF_C_SET_VALUE(clientConfig, audio_channels, 2);
