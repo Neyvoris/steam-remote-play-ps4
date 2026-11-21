@@ -1,0 +1,26 @@
+# Native build outputs
+/build/
+/out/
+/dist/
+CMakeFiles/
+CMakeCache.txt
+*.o
+*.obj
+*.a
+*.so
+*.dll
+*.exe
+*.elf
+*.self
+*.prx
+*.pkg
+
+# Local configuration, credentials and logs
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.log
+/logs/
+/secrets/
