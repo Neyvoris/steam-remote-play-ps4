@@ -30,7 +30,7 @@ jobs:
       - name: Package and validate
         run: |
           mkdir -p "$RUNNER_TEMP/openssl"
-          docker run --rm debian:bullseye-slim sh -ec 'cd /tmp; apt-get update >&2; apt-get download libssl1.1 >&2; dpkg-deb -x libssl*.deb ssl; tar -C ssl/usr/lib/x86_64-linux-gnu -cf - libssl.so.1.1 libcrypto.so.1.1' | tar xf - -C "$RUNNER_TEMP/openssl"
+          docker run --rm buildpack-deps:bullseye tar -C /usr/lib/x86_64-linux-gnu -cf - libssl.so.1.1 libcrypto.so.1.1 | tar xf - -C "$RUNNER_TEMP/openssl"
           export LD_LIBRARY_PATH="$RUNNER_TEMP/openssl"
           bash scripts/package.sh
           sha256sum dist/*.pkg | tee dist/SHA256SUMS
