@@ -213,7 +213,7 @@ static bool request_stream(IHS_Client *client, const IHS_HostInfo *host, const S
         .maxFramerateDenominator = 1,
         .audioChannelCount = 2,
         .streamingInterface = IHS_StreamInterfaceBigPicture,
-        .gamepadCount = 1
+        .gamepadCount = gamepad_prepare_stream()
     };
     return IHS_ClientStreamingRequest(client, host, &request);
 }
