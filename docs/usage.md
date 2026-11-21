@@ -2,6 +2,8 @@
 
 ## Install or update
 
+An earlier build was tested on PS4 system software **13.02** with GoldHEN, as reported by a user.
+
 - Use a PS4 with GoldHEN running, a DualShock 4, and a PC with Steam Remote Play enabled. Connect both devices to the same local network.
 - Download the PKG from the release assets. Put it on a USB drive and install it using Package Installer on PS4. A source archive is for building the client.
 - Launch Steam on the PC before opening the PS4 app. Select the host with the D-pad and press Cross. For first-time pairing, enter the displayed PIN under Steam > Settings > Remote Play > Pair Steam Link.

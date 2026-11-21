@@ -4,6 +4,10 @@ An experimental, unofficial Steam Remote Play client for PlayStation 4 running G
 
 [Setup and troubleshooting](docs/usage.md) | [Architecture and release workflow](docs/architecture.md)
 
+## Compatibility
+
+An earlier build was tested by a user on a physical PS4 running system software **13.02** with GoldHEN. Check the release notes for the verification status of each new build.
+
 ## Quick start
 
 1. On your PC, enable **Steam > Settings > Remote Play** and leave Steam running. Connect the PC and PS4 to the same local network.
