@@ -15,8 +15,10 @@ static off_t offset;
 static int reserved;
 static unsigned index;
 static int64_t flip = 1;
-static int64_t pending;
-static uint32_t *buffers[2];
+enum { DISPLAY_BUFFERS = 3 };
+static int64_t buffer_flips[DISPLAY_BUFFERS];
+static int64_t displayed_flip;
+static uint32_t *buffers[DISPLAY_BUFFERS];
 static int output_width = SCREEN_WIDTH, output_height = SCREEN_HEIGHT;
 static const size_t alignment = 0x200000;
 static size_t buffer_size;
@@ -32,7 +34,7 @@ static int clamp(int value, int min, int max)
 
 ScreenArea screen_area_default(void)
 {
-    return (ScreenArea){.right = SCREEN_WIDTH, .bottom = SCREEN_HEIGHT};
+    return (ScreenArea){.right = SCREEN_WIDTH, .bottom = SCREEN_HEIGHT, .fill = true};
 }
 
 ScreenArea screen_area_load(void)
@@ -44,14 +46,16 @@ ScreenArea screen_area_load(void)
     int fields = fscanf(file, "%1u %5d %5d %5d %5d %1u", &version, &saved.left, &saved.top,
                         &saved.right, &saved.bottom, &fill);
     fclose(file);
-    if (fields != 6 || (version != 1 && version != 2) || fill > 1 ||
+    if (fields != 6 || (version != 1 && version != 2 && version != 3) || fill > 1 ||
         saved.left < -SCREEN_LIMIT_X || saved.top < -SCREEN_LIMIT_Y ||
         saved.right > SCREEN_WIDTH + SCREEN_LIMIT_X || saved.bottom > SCREEN_HEIGHT + SCREEN_LIMIT_Y ||
         saved.left > SCREEN_LIMIT_X || saved.top > SCREEN_LIMIT_Y ||
         saved.right < SCREEN_WIDTH - SCREEN_LIMIT_X || saved.bottom < SCREEN_HEIGHT - SCREEN_LIMIT_Y)
         return screen_area_default();
-    /* Version 1 used Fill by default, even for a calibrated screen. */
-    screen_area_set_fill(&saved, version == 2 && fill != 0);
+    /* Migrate the old full-screen Fit default once. Preserve calibrated bounds. */
+    const bool full_screen = saved.left == 0 && saved.top == 0 &&
+                             saved.right == SCREEN_WIDTH && saved.bottom == SCREEN_HEIGHT;
+    screen_area_set_fill(&saved, fill != 0 || (version < 3 && full_screen));
     return saved;
 }
 
@@ -59,7 +63,7 @@ bool screen_area_save(ScreenArea area)
 {
     FILE *file = fopen(area_temp, "w");
     if (!file) return false;
-    bool ok = fprintf(file, "2 %d %d %d %d %u\n", area.left, area.top, area.right, area.bottom,
+    bool ok = fprintf(file, "3 %d %d %d %d %u\n", area.left, area.top, area.right, area.bottom,
                       (unsigned)area.fill) > 0;
     if (fclose(file) != 0) ok = false;
     if (ok && rename(area_temp, area_path) == 0) return true;
@@ -105,21 +109,21 @@ static int register_buffers(int width, int height)
     const size_t pixels = (size_t)width * height * sizeof(uint32_t);
     buffer_size = (pixels + alignment - 1) & ~(alignment - 1);
     startup_log_step("allocate display buffers");
-    int rc = sceKernelAllocateDirectMemory(0, sceKernelGetDirectMemorySize(), 2 * buffer_size,
+    int rc = sceKernelAllocateDirectMemory(0, sceKernelGetDirectMemorySize(), DISPLAY_BUFFERS * buffer_size,
                                           alignment, 3, &offset);
     if (rc < 0) return rc;
     reserved = 1;
     startup_log_step("map display buffers");
-    rc = sceKernelMapDirectMemory(&memory, 2 * buffer_size, 0x33, 0, offset, alignment);
+    rc = sceKernelMapDirectMemory(&memory, DISPLAY_BUFFERS * buffer_size, 0x33, 0, offset, alignment);
     if (rc < 0) return rc;
-    buffers[0] = memory;
-    buffers[1] = (uint32_t *)((char *)memory + buffer_size);
+    for (unsigned i = 0; i < DISPLAY_BUFFERS; ++i)
+        buffers[i] = (uint32_t *)((char *)memory + i * buffer_size);
     OrbisVideoOutBufferAttribute format = {0};
     sceVideoOutSetBufferAttribute(&format, ORBIS_VIDEO_OUT_PIXEL_FORMAT_A8B8G8R8_SRGB,
         ORBIS_VIDEO_OUT_TILING_MODE_LINEAR, ORBIS_VIDEO_OUT_ASPECT_RATIO_16_9,
         width, height, width);
     startup_log_step("register display buffers");
-    rc = sceVideoOutRegisterBuffers(handle, 0, (void *const *)buffers, 2, &format);
+    rc = sceVideoOutRegisterBuffers(handle, 0, (void *const *)buffers, DISPLAY_BUFFERS, &format);
     if (rc >= 0) {
         output_width = width;
         output_height = height;
@@ -197,12 +201,13 @@ void screen_shutdown(void)
 {
     if (handle >= 0 && sceVideoOutClose(handle) < 0) return;
     handle = -1;
-    if (memory) sceKernelMunmap(memory, 2 * buffer_size);
-    if (reserved) sceKernelReleaseDirectMemory(offset, 2 * buffer_size);
+    if (memory) sceKernelMunmap(memory, DISPLAY_BUFFERS * buffer_size);
+    if (reserved) sceKernelReleaseDirectMemory(offset, DISPLAY_BUFFERS * buffer_size);
     memory = NULL;
     reserved = 0;
     index = 0;
-    pending = 0;
+    displayed_flip = 0;
+    for (unsigned i = 0; i < DISPLAY_BUFFERS; ++i) buffer_flips[i] = 0;
 }
 
 void screen_output_size(int *width, int *height)
@@ -214,22 +219,28 @@ void screen_output_size(int *width, int *height)
 uint32_t *screen_pixels(void)
 {
     if (handle < 0) return NULL;
-    if (pending) {
-        OrbisVideoOutFlipStatus status = {0};
-        if (sceVideoOutGetFlipStatus(handle, &status) < 0 || status.flipArg != pending) return NULL;
-        pending = 0;
-        index ^= 1;
+    OrbisVideoOutFlipStatus status = {0};
+    if (sceVideoOutGetFlipStatus(handle, &status) >= 0 &&
+        status.flipArg > displayed_flip && status.flipArg < flip)
+        displayed_flip = status.flipArg;
+    for (unsigned i = 0; i < DISPLAY_BUFFERS; ++i) {
+        /* Reuse only buffers that are neither scanned out nor queued. */
+        if (buffer_flips[i] == 0 || buffer_flips[i] < displayed_flip) {
+            index = i;
+            return buffers[i];
+        }
     }
-    return buffers[index];
+    return NULL;
 }
 
 int screen_present(void)
 {
-    if (handle < 0 || pending) return -1;
+    if (handle < 0) return -1;
     int rc = sceVideoOutSubmitFlip(handle, (int)index, ORBIS_VIDEO_OUT_FLIP_VSYNC, flip);
     if (rc < 0) return rc;
-    pending = flip++;
-    return sceGnmSubmitDone();
+    buffer_flips[index] = flip++;
+    (void)sceGnmSubmitDone();
+    return 0;
 }
 
 static void rect(uint32_t *fb, int x, int y, int w, int h, uint32_t color)
@@ -314,7 +325,7 @@ void screen_host_menu(const char *status, const char *host, const char *detail, 
     rect(fb, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0xff181319);
     rect(fb, 72, 76, 7, 52, 0xffe180b6);
     text(fb, 104, 80, 5, white, "Steam Remote Play");
-    text(fb, 1020, 100, 2, dim, "0.2.2");
+    text(fb, 1020, 100, 2, dim, "0.2.3");
     rect(fb, 72, 183, 1136, 365, 0xff302534);
     text(fb, 106, 217, 4, lavender, status);
     text(fb, 106, 303, 3, white, host);
