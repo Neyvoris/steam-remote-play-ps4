@@ -21,7 +21,8 @@ uint32_t *screen_pixels(void);
 int screen_present(void);
 void screen_output_size(int *width, int *height);
 void screen_menu(const char *status, const char *host, const char *detail);
-void screen_host_menu(const char *status, const char *host, const char *detail, const char *profile);
+void screen_tv_menu(unsigned tab, const char hosts[][64], unsigned count, unsigned selected,
+                    const char *detail, const char *profile, const char *pin);
 ScreenArea screen_area_default(void);
 ScreenArea screen_area_load(void);
 bool screen_area_save(ScreenArea area);

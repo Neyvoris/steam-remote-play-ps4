@@ -538,7 +538,8 @@ static void menu(IHS_Client *client, const IHS_ClientConfig *config)
     MenuPhase phase = BROWSING;
     ScreenArea area = screen_area_load();
     unsigned video_profile = load_profile();
-    unsigned selected = 0;
+    unsigned selected = 0, tab = 0;
+    char host_names[MAX_HOSTS][64];
     uint32_t previous = gamepad_buttons();
     uint64_t next_draw = 0, deadline = 0;
     IHS_HostInfo target = {0};
@@ -553,6 +554,8 @@ static void menu(IHS_Client *client, const IHS_ClientConfig *config)
         IHS_SessionInfo info = {0};
         pthread_mutex_lock(&shared_lock);
         unsigned count = host_count;
+        for (unsigned i = 0; i < count; ++i)
+            snprintf(host_names[i], sizeof(host_names[i]), "%.63s", discovered_hosts[i].hostname);
         if (phase == BROWSING && count) {
             if (pressed & ORBIS_PAD_BUTTON_DOWN) selected = (selected + 1) % count;
             if (pressed & ORBIS_PAD_BUTTON_UP) selected = (selected + count - 1) % count;
@@ -570,7 +573,14 @@ static void menu(IHS_Client *client, const IHS_ClientConfig *config)
         pthread_mutex_unlock(&shared_lock);
 
         if (phase == BROWSING) {
-            if (pressed & ORBIS_PAD_BUTTON_CIRCLE) return;
+            if (pressed & ORBIS_PAD_BUTTON_LEFT) tab = (tab + 2) % 3;
+            if (pressed & ORBIS_PAD_BUTTON_RIGHT) tab = (tab + 1) % 3;
+            if (pressed & ORBIS_PAD_BUTTON_TRIANGLE) tab = 1;
+            if (pressed & ORBIS_PAD_BUTTON_CIRCLE) {
+                if (!tab) return;
+                tab = 0;
+                continue;
+            }
             if (pressed & ORBIS_PAD_BUTTON_L1) {
                 screen_menu("Checking updates", "", "Contacting GitHub.");
                 updates_check(status, sizeof(status));
@@ -591,7 +601,7 @@ static void menu(IHS_Client *client, const IHS_ClientConfig *config)
                 continue;
             }
             if (pressed & (ORBIS_PAD_BUTTON_UP | ORBIS_PAD_BUTTON_DOWN)) status[0] = 0;
-            if (count && (pressed & (ORBIS_PAD_BUTTON_CROSS | ORBIS_PAD_BUTTON_SQUARE))) {
+            if (tab != 2 && count && (pressed & (ORBIS_PAD_BUTTON_CROSS | ORBIS_PAD_BUTTON_SQUARE))) {
                 target = host;
                 if (paired_host != target.clientId || paired.device_id != config->deviceId) {
                     paired = (Pairing){0};
@@ -678,19 +688,11 @@ static void menu(IHS_Client *client, const IHS_ClientConfig *config)
         }
 
         if (now >= next_draw) {
-            char label[84], detail[120];
-            if (phase == PAIRING) {
-                snprintf(label, sizeof(label), "PIN: %s", pin);
-                screen_menu(label, target.hostname, "On PC: Steam > Settings > Remote Play > Pair Steam Link.");
-            } else if (phase == REQUESTING) {
+            if (phase == REQUESTING) {
                 screen_menu("Connecting", target.hostname, "Waiting for the Steam host.");
-            } else if (count) {
-                snprintf(label, sizeof(label), "[%u/%u] %s", selected + 1, count, host.hostname);
-                snprintf(detail, sizeof(detail), "%s", status[0] ? status : "OPTIONS: screen size. SQUARE: pair again.");
-                screen_host_menu("Choose a Steam PC", label, detail, profiles[video_profile].label);
             } else {
-                screen_host_menu("Looking for Steam", "Waiting for a PC on this network",
-                                 status[0] ? status : "Enable Steam Remote Play on your PC.", profiles[video_profile].label);
+                screen_tv_menu(tab, host_names, count, selected, status,
+                               profiles[video_profile].label, phase == PAIRING ? pin : NULL);
             }
             next_draw = now + 80000;
         }

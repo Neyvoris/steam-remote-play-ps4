@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "font8x8.h"
+#include "tv_font.h"
 #include <orbis/VideoOut.h>
 #include <orbis/GnmDriver.h>
 #include <orbis/Sysmodule.h>
@@ -317,119 +318,154 @@ bool screen_calibration_preview(const ScreenCalibration *calibration)
     return screen_present() >= 0;
 }
 
-static void menu_detail(uint32_t *fb, int x, int y, const char *message)
+/* VideoOut stores red in the low byte. Coordinates use the 720p UI canvas. */
+static const uint32_t ink = 0xfffff6ec, muted = 0xffcdb49b;
+static const uint32_t focus = 0xfff7cb68, panel = 0xff39291a, backdrop = 0xff23180e;
+
+static uint32_t blend_text(uint32_t background, uint32_t foreground, unsigned alpha)
 {
-    enum { LINE_CHARS = 59 };
-    for (int line = 0; line < 3 && *message; ++line) {
-        char buffer[LINE_CHARS + 1];
-        size_t visible = strlen(message);
-        if (visible > LINE_CHARS) {
-            visible = LINE_CHARS;
-            while (visible > 0 && message[visible] != ' ') --visible;
-            if (!visible) visible = LINE_CHARS;
+    uint32_t result = 0xff000000;
+    for (unsigned shift = 0; shift < 24; shift += 8) {
+        const unsigned bg = (background >> shift) & 255;
+        const unsigned fg = (foreground >> shift) & 255;
+        result |= ((bg * (255 - alpha) + fg * alpha + 127) / 255) << shift;
+    }
+    return result;
+}
+
+static void tv_text(uint32_t *fb, int x, int y, int size, int limit, uint32_t color, const char *label)
+{
+    int target_x = x * output_width / SCREEN_WIDTH;
+    const int target_y = y * output_height / SCREEN_HEIGHT;
+    const int scale = size * output_width / SCREEN_WIDTH;
+    const int right = limit * output_width / SCREEN_WIDTH;
+    for (const unsigned char *ch = (const unsigned char *)label; *ch; ++ch) {
+        const unsigned glyph = (*ch >= 32 && *ch <= 126 ? *ch : '?') - 32;
+        const int advance = (tv_advance[glyph] * scale + 16) / TV_FONT_SIZE;
+        if (target_x + advance > right) break;
+        if (*ch != ' ') {
+            const uint8_t *coverage = tv_coverage + glyph * TV_GLYPH_WIDTH * TV_GLYPH_HEIGHT;
+            const int width = TV_GLYPH_WIDTH * scale / TV_FONT_SIZE;
+            const int height = TV_GLYPH_HEIGHT * scale / TV_FONT_SIZE;
+            for (int row = 0; row < height && target_y + row < output_height; ++row) {
+                const uint8_t *source = coverage + row * TV_FONT_SIZE / scale * TV_GLYPH_WIDTH;
+                uint32_t *dest = fb + (target_y + row) * output_width + target_x;
+                for (int col = 0; col < width && target_x + col < right; ++col) {
+                    const unsigned alpha = source[col * TV_FONT_SIZE / scale];
+                    if (alpha) dest[col] = blend_text(dest[col], color, alpha);
+                }
+            }
         }
-        memcpy(buffer, message, visible);
-        buffer[visible] = 0;
-        text(fb, x, y + line * 27, 2, 0xffd7bda6, buffer);
-        message += visible;
-        while (*message == ' ') ++message;
+        target_x += advance;
     }
 }
 
-/* VideoOut uses A8B8G8R8, so red occupies the low byte. */
-static const uint32_t tv_ink = 0xfff9f2e8;
-static const uint32_t tv_muted = 0xffcbb39c;
-static const uint32_t tv_focus = 0xffffba66;
-static const uint32_t tv_card = 0xff4a3424;
-
-static void tv_action(uint32_t *fb, int x, int width, const char *key, const char *label)
+static void tv_shell(uint32_t *fb, unsigned tab, const char *footer)
 {
-    rect(fb, x, 524, width, 76, tv_card);
-    rect(fb, x, 524, width, 2, 0xff674b30);
-    text(fb, x + 16, 539, 2, tv_focus, key);
-    text(fb, x + 16, 567, 2, tv_ink, label);
-}
-
-static void tv_monitor(uint32_t *fb)
-{
-    rect(fb, 864, 130, 300, 188, 0xff352416);
-    rect(fb, 858, 122, 300, 188, 0xffa56d3c);
-    rect(fb, 862, 126, 292, 180, 0xff3e2918);
-    rect(fb, 879, 143, 258, 142, 0xff624023);
-    for (int y = 0; y < 142; ++y) {
-        const unsigned shade = 78 + (unsigned)y / 5;
-        rect(fb, 879, 143 + y, 258, 1, 0xff000000u | shade << 16 |
-             (shade * 2 / 3) << 8 | shade / 3);
+    rect(fb, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, backdrop);
+    tv_text(fb, 54, 25, 26, 400, ink, "Steam Remote Play");
+    const int x[] = {454, 580, 753};
+    const char *names[] = {"Home", "Computers", "Settings"};
+    for (unsigned i = 0; i < 3; ++i) {
+        tv_text(fb, x[i], 29, 22, x[i] + 145, i == tab ? ink : muted, names[i]);
+        if (i == tab) rect(fb, x[i], 64, i == 1 ? 110 : 75, 3, focus);
     }
-    rect(fb, 905, 248, 206, 2, 0xffb67a46);
-    rect(fb, 986, 310, 44, 25, 0xffa56d3c);
-    rect(fb, 948, 335, 120, 6, 0xffa56d3c);
+    tv_text(fb, 1115, 29, 20, 1226, muted, "PS4 0.2.8");
+    rect(fb, 54, 77, 1172, 1, 0xff65513f);
+    rect(fb, 54, 651, 1172, 1, 0xff65513f);
+    tv_text(fb, 54, 668, 19, 1226, muted, footer);
 }
 
-void screen_host_menu(const char *status, const char *host, const char *detail, const char *profile)
+static void tv_button(uint32_t *fb, int x, int y, int w, const char *label, bool active)
+{
+    rect(fb, x, y, w, 60, active ? focus : panel);
+    tv_text(fb, x + 20, y + 13, 27, x + w - 16, active ? backdrop : ink, label);
+}
+
+static void pc_art(uint32_t *fb)
+{
+    rect(fb, 780, 170, 362, 230, 0xff68482c);
+    rect(fb, 787, 177, 348, 216, 0xff3e2b1b);
+    rect(fb, 806, 196, 310, 170, 0xff56391f);
+    rect(fb, 935, 400, 52, 54, 0xff68482c);
+    rect(fb, 885, 452, 152, 10, 0xff68482c);
+    rect(fb, 853, 313, 208, 83, 0xff9c6b3f);
+    rect(fb, 860, 320, 194, 69, panel);
+    rect(fb, 894, 338, 10, 34, focus);
+    rect(fb, 882, 350, 34, 10, focus);
+    rect(fb, 1001, 343, 10, 10, focus);
+    rect(fb, 1018, 357, 10, 10, focus);
+}
+
+static void computer_rows(uint32_t *fb, const char hosts[][64], unsigned count,
+                          unsigned selected, bool dim)
+{
+    tv_text(fb, 54, 108, 48, 1200, dim ? muted : ink, "Computers");
+    if (!count) {
+        tv_text(fb, 56, 200, 27, 1200, muted, "Looking for Steam PCs on your network...");
+        return;
+    }
+    const unsigned first = selected >= 4 ? selected - 3 : 0;
+    for (unsigned i = first; i < count && i < first + 4; ++i) {
+        const int y = 190 + (int)(i - first) * 99;
+        const bool active = i == selected && !dim;
+        rect(fb, 54, y, 1172, 82, active ? focus : panel);
+        if (active) rect(fb, 57, y + 3, 1166, 76, panel);
+        tv_text(fb, 81, y + 10, 29, 1160, dim ? muted : ink, hosts[i]);
+        tv_text(fb, 81, y + 48, 18, 1160, active ? focus : muted, "Available on your network");
+    }
+}
+
+void screen_tv_menu(unsigned tab, const char hosts[][64], unsigned count, unsigned selected,
+                    const char *detail, const char *profile, const char *pin)
 {
     uint32_t *fb = screen_pixels();
     if (!fb) return;
-
-    const bool selecting = profile && strcmp(status, "Choose a Steam PC") == 0;
-    const bool pairing = strncmp(status, "PIN:", 4) == 0;
-    const bool connecting = strcmp(status, "Connecting") == 0 ||
-                            strcmp(status, "Opening Big Picture") == 0;
-    rect(fb, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0xff241911);
-    for (int y = 76; y < 461; ++y) {
-        const unsigned shade = 66 - (unsigned)(y - 76) / 10;
-        rect(fb, 0, y, SCREEN_WIDTH, 1, 0xff000000u | shade << 16 |
-             (shade * 2 / 3) << 8 | shade / 3);
-    }
-    rect(fb, 0, 0, SCREEN_WIDTH, 76, 0xff2d1f14);
-    rect(fb, 54, 28, 20, 20, tv_focus);
-    rect(fb, 59, 33, 10, 8, 0xff2d1f14);
-    text(fb, 89, 28, 2, tv_ink, "Steam Remote Play");
-    text(fb, 514, 28, 2, tv_ink, profile ? "Home" : pairing ? "Pairing" : "Connection");
-    rect(fb, 514, 55, profile ? 64 : 112, 3, tv_focus);
-    text(fb, 1036, 28, 2, tv_muted, "PS4 0.2.7");
-
-    tv_monitor(fb);
-    text(fb, 54, 124, 2, tv_focus, profile ? "STEAM ON YOUR LOCAL NETWORK" : "REMOTE PLAY");
-    if (pairing) {
-        text(fb, 54, 175, 4, tv_ink, "Pair your Steam PC");
-        text(fb, 54, 228, 2, tv_muted, host);
-        rect(fb, 54, 274, 392, 94, tv_card);
-        rect(fb, 54, 274, 4, 94, tv_focus);
-        text(fb, 73, 304, 4, tv_ink, status);
-        menu_detail(fb, 54, 392, detail);
-    } else if (profile) {
-        text(fb, 54, 176, 4, tv_ink, selecting ? "Connect to your PC" : "Find your Steam PC");
-        char name[46];
-        snprintf(name, sizeof(name), "%.45s", host);
-        text(fb, 54, 242, 2, tv_muted, name);
-        if (selecting) {
-            rect(fb, 54, 288, 284, 64, tv_focus);
-            text(fb, 76, 311, 2, 0xff241911, "CROSS  Connect");
-        }
-        menu_detail(fb, 54, 381, detail);
+    const char *host = count && selected < count ? hosts[selected] : "";
+    if (pin) {
+        tv_shell(fb, 1, "Circle  Cancel pairing");
+        computer_rows(fb, hosts, count, selected, true);
+        rect(fb, 302, 185, 676, 380, focus);
+        rect(fb, 305, 188, 670, 374, panel);
+        tv_text(fb, 374, 224, 42, 927, ink, "Pair with Steam");
+        tv_text(fb, 374, 299, 102, 927, ink, pin);
+        tv_text(fb, 374, 434, 26, 927, muted, "Enter this PIN on your PC.");
+        tv_text(fb, 374, 485, 20, 927, muted, "Steam > Settings > Remote Play > Pair Steam Link");
+    } else if (tab == 1) {
+        tv_shell(fb, tab, "Left / Right  Change tab     Up / Down  Select     Cross  Connect     Square  Pair again     Circle  Back");
+        computer_rows(fb, hosts, count, selected, false);
+        tv_text(fb, 54, 604, 19, 1226, muted, detail);
+    } else if (tab == 2) {
+        tv_shell(fb, tab, "Left / Right  Change tab     Circle  Back");
+        tv_text(fb, 54, 108, 48, 1226, ink, "Settings");
+        tv_button(fb, 54, 200, 620, "R1   Video profile", false);
+        tv_text(fb, 710, 213, 26, 1226, focus, profile);
+        tv_button(fb, 54, 280, 620, "Options   Screen calibration", false);
+        tv_button(fb, 54, 360, 620, "L1   Check GitHub releases", false);
+        tv_text(fb, 54, 460, 22, 1226, muted, detail);
     } else {
-        text(fb, 54, 176, 3, tv_ink, status);
-        if (*host) text(fb, 54, 232, 2, tv_focus, host);
-        menu_detail(fb, 54, 380, detail);
+        tv_shell(fb, tab, "Left / Right  Change tab     Square  Pair again     Circle  Exit");
+        pc_art(fb);
+        tv_text(fb, 54, 127, 59, 752, ink, "Play from");
+        tv_text(fb, 54, 195, 59, 752, ink, "your PC");
+        tv_text(fb, 56, 286, 28, 752, ink, *host ? host : "Looking for Steam PCs...");
+        if (*host) tv_text(fb, 56, 327, 20, 752, focus, "Available on your network");
+        tv_button(fb, 54, 381, 470, "Cross   Start streaming", *host != 0);
+        tv_button(fb, 54, 454, 470, "Triangle   Computers", false);
+        tv_text(fb, 56, 554, 20, 1226, muted, detail);
     }
-
-    if (profile) {
-        text(fb, 54, 480, 2, tv_ink, "Stream controls");
-        tv_action(fb, 54, 425, "R1  Video profile", profile);
-        tv_action(fb, 495, 228, "OPTIONS", "Screen size");
-        tv_action(fb, 739, 218, "L1", "Check updates");
-        if (selecting) tv_action(fb, 973, 253, "SQUARE", "Pair again");
-    }
-
-    rect(fb, 54, 634, 1172, 2, 0xff4b3625);
-    if (selecting) text(fb, 54, 660, 2, tv_muted, "D-PAD  Change PC     CROSS  Connect     CIRCLE  Exit");
-    else if (profile) text(fb, 54, 660, 2, tv_muted, "CIRCLE  Exit");
-    else if (pairing || connecting) text(fb, 54, 660, 2, tv_muted, "CIRCLE  Cancel");
     (void)screen_present();
 }
 
 void screen_menu(const char *status, const char *host, const char *detail)
 {
-    screen_host_menu(status, host, detail, NULL);
+    uint32_t *fb = screen_pixels();
+    if (!fb) return;
+    const bool cancel = strcmp(status, "Connecting") == 0 ||
+                        strcmp(status, "Opening Big Picture") == 0;
+    tv_shell(fb, 0, cancel ? "Circle  Cancel" : "");
+    tv_text(fb, 54, 141, 45, 1226, ink, status);
+    if (*host) tv_text(fb, 54, 224, 28, 1226, focus, host);
+    tv_text(fb, 54, 314, 23, 1226, muted, detail);
+    (void)screen_present();
 }
