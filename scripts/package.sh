@@ -24,7 +24,7 @@ sfo="$stage/sce_sys/param.sfo"
 "$tools/PkgTool.Core" sfo_new "$sfo"
 entry() { "$tools/PkgTool.Core" sfo_setentry "$sfo" "$1" --type "$2" --maxsize "$3" --value "$4"; }
 entry APP_TYPE Integer 4 1
-entry APP_VER Utf8 8 02.08
+entry APP_VER Utf8 8 02.09
 entry ATTRIBUTE Integer 4 0
 entry CATEGORY Utf8 4 gd
 entry CONTENT_ID Utf8 48 "$content_id"
@@ -32,12 +32,12 @@ entry DOWNLOAD_DATA_SIZE Integer 4 0
 entry SYSTEM_VER Integer 4 0
 entry TITLE Utf8 128 "Steam Remote Play PS4"
 entry TITLE_ID Utf8 12 SRPL00001
-entry VERSION Utf8 8 02.08
+entry VERSION Utf8 8 02.09
 (
     cd "$stage"
     "$tools/create-gp4" -out release.gp4 --content-id="$content_id" \
         --files 'eboot.bin sce_module/libc.prx sce_module/libSceFios2.prx sce_sys/about/right.sprx sce_sys/icon0.png sce_sys/param.sfo LICENSE.txt'
     "$tools/PkgTool.Core" pkg_build release.gp4 "$out"
 )
-mv "$out/$content_id.pkg" "$out/SteamRemotePlay-PS4-0.2.8.pkg"
-"$tools/PkgTool.Core" pkg_validate "$out/SteamRemotePlay-PS4-0.2.8.pkg"
+mv "$out/$content_id.pkg" "$out/SteamRemotePlay-PS4-0.2.9.pkg"
+"$tools/PkgTool.Core" pkg_validate "$out/SteamRemotePlay-PS4-0.2.9.pkg"

@@ -6,7 +6,11 @@
 #include <strings.h>
 #include <orbis/Net.h>
 #include <orbis/Ssl.h>
+/* OpenOrbis 0.5.4 exposes this SDK symbol as a placeholder. */
+#define sceHttpSetResponseHeaderMaxSize orbis_header_size_placeholder
 #include <orbis/Http.h>
+#undef sceHttpSetResponseHeaderMaxSize
+extern int32_t sceHttpSetResponseHeaderMaxSize(int32_t id, uint64_t size);
 #include <orbis/Sysmodule.h>
 #include "startup.h"
 #include "updates.h"
@@ -83,6 +87,7 @@ void updates_check(char *message, size_t capacity)
     sceHttpSetRecvTimeOut(tmpl, 3000000);
     if ((result = conn = sceHttpCreateConnectionWithURL(tmpl, latest, false)) < 0 ||
         (result = req = sceHttpCreateRequestWithURL(conn, ORBIS_METHOD_GET, latest, 0)) < 0 ||
+        (result = sceHttpSetResponseHeaderMaxSize(req, 32 * 1024)) < 0 ||
         (result = sceHttpSendRequest(req, NULL, 0)) < 0 ||
         (result = sceHttpGetStatusCode(req, &code)) < 0) goto done;
     startup_log_result("GitHub update HTTP status", code);
