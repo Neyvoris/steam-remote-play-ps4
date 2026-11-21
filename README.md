@@ -2,6 +2,8 @@
 
 An experimental, unofficial Steam Remote Play client for PlayStation 4 running GoldHEN. Your PC runs the game and streams it over your local network. The PS4 plays the video and stereo Opus audio and sends input from one DualShock 4.
 
+[Setup and troubleshooting](docs/usage.md) | [Architecture and release workflow](docs/architecture.md)
+
 ## Quick start
 
 1. On your PC, enable **Steam > Settings > Remote Play** and leave Steam running. Connect the PC and PS4 to the same local network.
