@@ -1,0 +1,41 @@
+name: Build PS4 package
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-18 lld-18 nasm cmake make
+          mkdir -p "$RUNNER_TEMP/bin"
+          ln -s /usr/bin/clang-18 "$RUNNER_TEMP/bin/clang"
+          ln -s /usr/bin/clang++-18 "$RUNNER_TEMP/bin/clang++"
+          ln -s /usr/bin/ld.lld-18 "$RUNNER_TEMP/bin/ld.lld"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          curl -fL --retry 3 https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz | tar xz -C "$RUNNER_TEMP"
+          echo "OO_PS4_TOOLCHAIN=$RUNNER_TEMP/OpenOrbis/PS4Toolchain" >> "$GITHUB_ENV"
+          echo "PS4_DEPS=$GITHUB_WORKSPACE/deps" >> "$GITHUB_ENV"
+      - name: Compile client
+        run: |
+          chmod +x scripts/*.sh
+          bash scripts/dependencies.sh
+          cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE="$PWD/scripts/orbis.cmake" -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j4
+      - name: Package and validate
+        run: |
+          mkdir -p "$RUNNER_TEMP/openssl"
+          docker run --rm debian:bullseye-slim sh -ec 'cd /tmp; apt-get update >&2; apt-get download libssl1.1 >&2; dpkg-deb -x libssl*.deb ssl; tar -C ssl/usr/lib/x86_64-linux-gnu -cf - libssl.so.1.1 libcrypto.so.1.1' | tar xf - -C "$RUNNER_TEMP/openssl"
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/openssl"
+          bash scripts/package.sh
+          sha256sum dist/*.pkg | tee dist/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SteamRemotePlay-PS4-diagnostics
+          path: dist/
+          if-no-files-found: error
