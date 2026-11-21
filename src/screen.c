@@ -14,7 +14,7 @@ static int handle = -1;
 static void *memory;
 static off_t offset;
 static int reserved;
-static unsigned index;
+static unsigned draw_buffer_index;
 static int64_t flip = 1;
 enum { DISPLAY_BUFFERS = 3 };
 static int64_t buffer_flips[DISPLAY_BUFFERS];
@@ -204,7 +204,7 @@ void screen_shutdown(void)
     if (reserved) sceKernelReleaseDirectMemory(offset, DISPLAY_BUFFERS * buffer_size);
     memory = NULL;
     reserved = 0;
-    index = 0;
+    draw_buffer_index = 0;
     displayed_flip = 0;
     for (unsigned i = 0; i < DISPLAY_BUFFERS; ++i) buffer_flips[i] = 0;
 }
@@ -225,7 +225,7 @@ uint32_t *screen_pixels(void)
     for (unsigned i = 0; i < DISPLAY_BUFFERS; ++i) {
         /* Reuse only buffers that are neither scanned out nor queued. */
         if (buffer_flips[i] == 0 || buffer_flips[i] < displayed_flip) {
-            index = i;
+            draw_buffer_index = i;
             return buffers[i];
         }
     }
@@ -235,9 +235,9 @@ uint32_t *screen_pixels(void)
 int screen_present(void)
 {
     if (handle < 0) return -1;
-    int rc = sceVideoOutSubmitFlip(handle, (int)index, ORBIS_VIDEO_OUT_FLIP_VSYNC, flip);
+    int rc = sceVideoOutSubmitFlip(handle, (int)draw_buffer_index, ORBIS_VIDEO_OUT_FLIP_VSYNC, flip);
     if (rc < 0) return rc;
-    buffer_flips[index] = flip++;
+    buffer_flips[draw_buffer_index] = flip++;
     (void)sceGnmSubmitDone();
     return 0;
 }
