@@ -29,5 +29,6 @@ void screen_area_set_fill(ScreenArea *area, bool fill);
 void screen_area_move(ScreenArea *area, bool bottom_right, int dx, int dy);
 ScreenArea screen_output_area(ScreenArea area, int width, int height);
 ScreenArea screen_video_area(ScreenArea area, int aspect_width, int aspect_height);
+void screen_diagnostics_overlay(uint32_t *pixels, const char *label);
 void screen_calibration_overlay(uint32_t *pixels, const ScreenCalibration *calibration);
 bool screen_calibration_preview(const ScreenCalibration *calibration);

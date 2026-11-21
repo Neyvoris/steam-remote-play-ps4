@@ -378,7 +378,7 @@ static void calibrate_screen(ScreenArea *area, bool live, uint32_t buttons)
         }
         previous = buttons;
         redraw |= pressed != 0;
-        if (live ? media_present(calibration.area, &calibration, redraw) :
+        if (live ? media_present(calibration.area, &calibration, redraw, NULL) :
                    redraw && screen_calibration_preview(&calibration)) redraw = false;
         sceKernelUsleep(5000);
     }
@@ -426,10 +426,28 @@ static const char *play(const IHS_ClientConfig *config, const IHS_SessionInfo *i
     uint64_t playback_started = 0, playback_stopped = 0;
     MediaVideoStatus playback_start = {0}, playback_end = {0};
     uint64_t menu_update = 0, sample_started = 0;
-    MediaVideoStatus sample_start = {0};
+    MediaVideoStatus sample_start = {0}, hud_start = {0};
+    uint64_t hud_started = started_at;
+    char hud[96] = "Measuring stream FPS...";
     uint32_t previous = gamepad_buttons();
     while (!atomic_load(&session_done)) {
-        if (media_present(*area, NULL, redraw)) {
+        const uint64_t hud_now = sceKernelGetProcessTime();
+        if (hud_now - hud_started >= UINT64_C(1000000)) {
+            const MediaVideoStatus status = media_video_status();
+            const uint64_t elapsed = hud_now - hud_started;
+            snprintf(hud, sizeof(hud), "%s | RX %u DEC %u OUT %u FPS | %u/%u us | LOG %s",
+                     status.hardware_fallback ? "SW fallback" :
+                     status.hardware_active ? "HW" : "SW",
+                     (unsigned)((status.received - hud_start.received) * UINT64_C(1000000) / elapsed),
+                     (unsigned)((status.decoded - hud_start.decoded) * UINT64_C(1000000) / elapsed),
+                     (unsigned)((status.submitted - hud_start.submitted) * UINT64_C(1000000) / elapsed),
+                     status.average_decode_us, status.average_render_us,
+                     startup_log_available() ? "open" : "failed");
+            hud_start = status;
+            hud_started = hud_now;
+            redraw = got_video;
+        }
+        if (media_present(*area, NULL, redraw, hud)) {
             if (!got_video && !stopping) {
                 playback_started = sceKernelGetProcessTime();
                 playback_start = media_video_status();

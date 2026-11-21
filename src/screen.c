@@ -258,6 +258,12 @@ static void text(uint32_t *fb, int x, int y, int scale, uint32_t color, const ch
     }
 }
 
+void screen_diagnostics_overlay(uint32_t *fb, const char *label)
+{
+    rect(fb, 40, 32, 1190, 36, 0xff101010);
+    text(fb, 52, 42, 2, 0xffffffff, label);
+}
+
 void screen_calibration_overlay(uint32_t *fb, const ScreenCalibration *calibration)
 {
     const ScreenArea area = calibration->area;

@@ -13,6 +13,11 @@ void startup_log_open(void)
     startup_log_step("Steam Remote Play PS4 0.2.1: main entered");
 }
 
+bool startup_log_available(void)
+{
+    return log_fd >= 0;
+}
+
 static void write_step(const char *name, const char *suffix, size_t suffix_len)
 {
     if (log_fd < 0) return;

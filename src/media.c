@@ -496,7 +496,7 @@ static IHS_StreamVideoSubmitResult video_submit(IHS_Session *session, const IHS_
     return result;
 }
 
-bool media_present(ScreenArea area, const ScreenCalibration *calibration, bool redraw)
+bool media_present(ScreenArea area, const ScreenCalibration *calibration, bool redraw, const char *diagnostics)
 {
     uint32_t *pixels = screen_pixels();
     if (!pixels) return false;
@@ -519,6 +519,7 @@ bool media_present(ScreenArea area, const ScreenCalibration *calibration, bool r
     render_us += sceKernelGetProcessTime() - start;
     ++render_attempts;
     if (calibration) screen_calibration_overlay(pixels, calibration);
+    if (diagnostics) screen_diagnostics_overlay(pixels, diagnostics);
     const uint64_t upload_end = ticket ? frame_clock_us() : 0;
     int result = screen_present();
     if (result < 0) {
