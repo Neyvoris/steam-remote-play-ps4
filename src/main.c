@@ -581,6 +581,12 @@ static void menu(IHS_Client *client, const IHS_ClientConfig *config)
                 tab = 0;
                 continue;
             }
+            if (tab == 2 && (pressed & ORBIS_PAD_BUTTON_SQUARE)) {
+                screen_menu("Installing update", "", "Downloading and checking the package...");
+                if (updates_install(status, sizeof(status))) return;
+                next_draw = 0;
+                continue;
+            }
             if (pressed & ORBIS_PAD_BUTTON_L1) {
                 screen_menu("Checking updates", "", "Contacting GitHub.");
                 updates_check(status, sizeof(status));

@@ -442,7 +442,8 @@ void screen_tv_menu(unsigned tab, const char hosts[][64], unsigned count, unsign
         tv_text(fb, 710, 213, 26, 1226, focus, profile);
         tv_button(fb, 54, 280, 620, "Options   Screen calibration", false);
         tv_button(fb, 54, 360, 620, "L1   Check GitHub releases", false);
-        tv_text(fb, 54, 460, 22, 1226, muted, detail);
+        tv_button(fb, 54, 440, 620, "Square   Install available update", false);
+        tv_text(fb, 54, 535, 22, 1226, muted, detail);
     } else {
         tv_shell(fb, tab, "Left / Right  Change tab     Square  Pair again     Circle  Exit");
         pc_art(fb);
