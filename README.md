@@ -1,62 +1,65 @@
-# Steam Remote Play PS4 0.2.1
+# Steam Remote Play PS4
 
-Экспериментальный клиент для PS4 с уже работающим GoldHEN. Подключается к Steam на ПК по локальной сети. Игра запускается на ПК, DualShock 4 подключён к PS4. На ПК нужен Steam с включённым Remote Play.
+An experimental, unofficial Steam Remote Play client for PlayStation 4 running GoldHEN. Your PC runs the game and streams it over your local network. The PS4 plays the video and stereo Opus audio and sends input from one DualShock 4.
 
-## Первый запуск
+## Quick start
 
-1. На ПК откройте **Steam → Настройки → Remote Play** и включите Remote Play. Оставьте Steam открытым. Подключите ПК и PS4 к одной домашней сети.
-2. Установите `SteamRemotePlay-PS4-0.2.1.pkg` через Package Installer на PS4 и откройте **Steam Remote Play PS4**.
-3. Выберите ПК стрелками вверх и вниз, затем нажмите **крестик**. При первом подключении PS4 покажет PIN. Введите его на ПК в **Steam → Настройки → Remote Play → Сопряжение со Steam Link**. После сопряжения клиент сохранит ключ для этого ПК и запросит запуск Steam Big Picture. **Квадрат** запускает сопряжение повторно.
-4. В Steam Big Picture откройте любую игру, которая поддерживает геймпад. Проверьте изображение, звук, кнопки, оба стика и курки. Для выхода из потока одновременно нажмите **OPTIONS + кнопку тачпада**.
+1. On your PC, enable **Steam > Settings > Remote Play** and leave Steam running. Connect the PC and PS4 to the same local network.
+2. Download the PKG from [GitHub Releases](https://github.com/ivanopolo30-dot/steam-remote-play-ps4/releases), install it using Package Installer, and open **Steam Remote Play PS4**.
+3. Select your PC with the D-pad and press **Cross**. If the PS4 displays a PIN, enter it in **Steam > Settings > Remote Play > Pair Steam Link**. The client saves the pairing and starts Steam Big Picture. Press **Square** in the host list to pair again.
+4. Launch a controller-compatible game in Big Picture. Press **OPTIONS + touchpad click** to end the stream. During gameplay, a touchpad click sends Back.
 
-У этой сборки экран поиска ПК и соединения на английском. Клиент воспроизводит стерео Opus и передаёт обычные кнопки, стики и курки одного DualShock 4. Нажатие тачпада в игре отправляется как Back. Выбор отдельных игр происходит внутри Big Picture.
+## Video profiles
 
-В списке ПК нажимайте **R1**, чтобы переключать профиль видео. Для новых установок по умолчанию запрашиваются **720p / 30 FPS (HW)** (до 6 Мбит/с). Если профиль уже сохранён, выберите этот режим кнопкой R1 перед подключением. Доступен также **1080p / 30 FPS** (до 14 Мбит/с). Также доступны **1080p / 60 FPS** (до 20 Мбит/с), **720p / 60 FPS** (до 11 Мбит/с) и **720p / 30 FPS** (до 6 Мбит/с). Выбранный профиль сохраняется и применяется при следующем подключении. Фактическое разрешение и частота зависят от Steam, сети и производительности PS4.
+Press **R1** in the host list to cycle profiles. Your selection is saved and applied on the next connection. A fresh installation defaults to **720p / 30 FPS (HW)**.
 
-Для аппаратного декодирования H.264 на PS4 выберите профиль с пометкой **(HW)**. Клиент загрузит системный модуль `libSceVideodec2` и запросит настройки выбранного профиля. При ошибке аппаратного декодера клиент переключится на FFmpeg. Остальные профили используют FFmpeg.
+| Profile | Requested bitrate limit | Decoder |
+| --- | ---: | --- |
+| 720p / 30 FPS (HW) | 6 Mbps | Videodec2 |
+| 720p / 30 FPS | 6 Mbps | FFmpeg |
+| 720p / 60 FPS | 11 Mbps | FFmpeg |
+| 1080p / 30 FPS | 14 Mbps | FFmpeg |
+| 1080p / 60 FPS | 20 Mbps | FFmpeg |
+| 1080p / 60 FPS (HW) | 20 Mbps | Videodec2 |
 
-## Подгонка изображения
+HW profiles use the PS4 system module `libSceVideodec2` for H.264 and fall back to FFmpeg if hardware decoding fails. Actual resolution and frame rate depend on Steam, the network, and the PS4.
 
-Нажмите **OPTIONS** в списке ПК или одновременно нажмите **L3 + R3** во время трансляции. Кнопкой **L1** выберите левый верхний угол, **R1** — правый нижний. Сдвигайте угол крестовиной. **Треугольник** переключает режимы **Fill** (заполняет область и при необходимости обрезает края) и **Fit** (показывает кадр целиком). **Квадрат** сбрасывает края, **крестик** сохраняет настройку, **кружок** выходит без сохранения. Настройка сохраняется между запусками.
+## Screen fit
 
-По умолчанию включён **Fit**. При переносе настроек из 0.1.5 он тоже включается, а отступы внутри экрана сохраняются. При трансляции с широкоформатного монитора на телевизор 16:9 в режиме Fit могут появиться полосы сверху и снизу.
+Open display calibration with **OPTIONS** in the host list or **L3 + R3** during a stream. Use **L1** to select the top-left corner, **R1** to select the bottom-right corner, and the D-pad to move the selected corner. Press **Triangle** to switch between **Fill**, which crops to fill the area while preserving aspect ratio, and **Fit**, which shows the entire frame and may leave black bars.
 
-**Статус проверки.** Для версии 0.2.1 нужна проверка на консоли. Для проверки запуска, сопряжения, видео, звука и ввода нужны реальная PS4 и Steam на ПК в той же сети. Совместимость с конкретной версией прошивки и задержка пока не измерены.
+Version 0.2.3 defaults to **Fill**. Press **Square** to restore full-screen defaults, **Cross** to save, or **Circle** to exit without saving.
 
-## Диагностика
+## Diagnostics
 
-Журнал `/data/steam-remote-ps4/startup.log` содержит этапы запуска, сопряжения и подключения. `Pairing (7)` означает, что Steam отклонил сопряжение. `Stream (7)` означает, что Steam сообщил об отсутствующих драйверах на ПК. Для второго случая можно приложить `logs/streaming_log.txt` из каталога Steam на ПК. Журнал PS4 можно приложить отдельно от файлов сопряжения.
+The in-stream overlay shows the current decoder (**HW**, **SW**, or **SW fallback**) and the rates for frames received (**RX**), decoded (**DEC**), and submitted to VideoOut (**OUT**). It also shows average video packet processing and frame preparation times in microseconds. In 0.2.2 and later, the frame preparation time excludes the final copy to the display buffer. **LOG open** means the log file was opened successfully.
 
-Версия 0.1.4 передаёт ограничение 30 кадров/с уже в первоначальном запросе к Steam. Если PS4 не удаётся открыть аудиовыход, клиент продолжает приём видео и записывает ошибку звука в журнал. Журнал также содержит сообщения транспорта при запуске сессии, параметры видеопотока и счётчики полученных, декодированных и выведенных кадров. Декодирование образцов H.264 и преобразование NV12 проверены на Linux. Поток между Steam и реальной PS4 ещё нужно проверить.
+The PS4 log at `/data/steam-remote-ps4/startup.log` records connection stages, decoder fallback errors, and periodic frame rates. If RX drops, compare that interval with `logs/streaming_log.txt` in the Steam installation on your PC. If RX and DEC stay steady while OUT drops, investigate the PS4 display path. Share relevant log excerpts without pairing files.
 
-В 0.1.5 контроллер передаёт кнопки, стики и курки в формате Generic Gamepad RAW V2. При запуске ввода журнал записывает размер HID-отчёта, запрошенный Steam.
+- `Pairing (7)` means Steam rejected the pairing request.
+- `Stream (7)` means Steam reported missing drivers on the PC.
+- If the PS4 cannot open the audio output, video continues and the audio error is logged.
 
-В 0.1.8 декодер H.264 использует оптимизации x86, которые FFmpeg выбирает по возможностям процессора. После выхода из трансляции журнал показывает средние значения FPS для собранных из сети, декодированных и отправленных на экран кадров.
+## Build on Linux x86-64
 
-В 0.1.9 профили 720p используют буферы VideoOut 1280×720. Клиент передаёт Steam время декодирования, преобразования и отправки кадра на экран, а также отмечает пропущенные кадры.
-
-В 0.2.1 после выхода из потока строка `Video decoder: Videodec2` в `startup.log` показывает выбранный аппаратный декодер. Строка `Videodec2 fallback to FFmpeg` содержит код ошибки при переключении на программный декодер. Строка `Video FPS` каждые пять секунд показывает FPS приёма, декодирования и вывода, а также последнюю цель Steam. Если падает уже FPS приёма, сравните этот интервал с `streaming_log.txt` на ПК. Если приём стабилен, а падает декодирование или вывод, узкое место находится на PS4.
-
-## Сборка на Linux x86-64
-
-Понадобятся Clang/LLD, NASM, CMake, GNU Make, Git, curl, tar, OpenOrbis **0.5.4** и среда для запуска поставляемого с ним `PkgTool.Core`. Если для упаковщика не хватает OpenSSL 1.1, подключите локально распакованный каталог с `libcrypto.so.1.1` и `libssl.so.1.1` через `LD_LIBRARY_PATH`.
+Install Clang/LLD, NASM, CMake, GNU Make, Git, curl, tar, and [OpenOrbis 0.5.4](https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/tag/v0.5.4). The SDK's `PkgTool.Core` may require OpenSSL 1.1. If needed, point `LD_LIBRARY_PATH` to a local directory containing `libcrypto.so.1.1` and `libssl.so.1.1`.
 
 ```bash
 export OO_PS4_TOOLCHAIN=/absolute/path/to/OpenOrbis/PS4Toolchain
 export PS4_DEPS="$PWD/deps"
-./scripts/dependencies.sh
+bash scripts/dependencies.sh
 cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE="$PWD/scripts/orbis.cmake" -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j4
-./scripts/package.sh
+bash scripts/package.sh
 ```
 
-Пакет находится в `dist/`. В исходном архиве лежат точные версии зависимостей в `deps/`. При сборке из архива `dependencies.sh` использует их на месте и собирает FFmpeg.
+The dependency script fetches pinned sources and builds FFmpeg. The package script writes and validates the PKG in `dist/`. GitHub Actions can also build and validate the package. Performance, firmware compatibility, and input latency require testing on a physical PS4.
 
-## Исходники и лицензии
+## Source and licenses
 
-- Код приложения — GPL-3.0-only, см. `LICENSE`.
-- Протокол Steam Remote Play — [IHSlib](https://github.com/kxn/ihslib/tree/04688d19951c68bedc4370234cc1752043632cb3), библиотека проекта [IHSplay](https://github.com/mariotaku/ihsplay), LGPL-3.0-or-later.
-- В пакет встроены H.264-декодер [FFmpeg](https://ffmpeg.org/) 6.1.4 (LGPL) и [Opus](https://github.com/xiph/opus) 1.5.2 (BSD-3-Clause). Протокол использует [Mbed TLS](https://github.com/Mbed-TLS/mbedtls) 2.28.10 (Apache-2.0 или GPL-2.0-or-later) и [protobuf-c](https://github.com/protobuf-c/protobuf-c) 1.5.2 (BSD-2-Clause). Лицензии находятся в соответствующих исходниках.
-- Вспомогательные модули из [OpenOrbis 0.5.4](https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/tree/v0.5.4) распространяются с исходным кодом и лицензией в `openorbis-modules/`. Для сборки всё равно нужен полный SDK.
-- Для аппаратного декодера клиент использует ABI системного модуля PS4. Справочные реализации [Moonlight DX PS4](https://git.fourletterworkshop.com/moonlight-dx-ps4/blob/main/src/moonlight/VideoDecoder.cpp) и [shadPS4](https://github.com/shadps4-emu/shadPS4/blob/main/src/core/libraries/videodec/videodec2.h).
-- Шрифт для первого экрана — [font8x8](https://github.com/dhepper/font8x8), public domain. Приложение не связано с Valve или Sony.
+- The application is licensed under GPL-3.0-only. See [LICENSE](LICENSE).
+- The Steam Remote Play protocol implementation uses [IHSlib](https://github.com/kxn/ihslib/tree/04688d19951c68bedc4370234cc1752043632cb3) from the [IHSplay](https://github.com/mariotaku/ihsplay) project, under LGPL-3.0-or-later.
+- The package uses [FFmpeg](https://ffmpeg.org/) 6.1.4 for H.264 decoding (LGPL), [Opus](https://github.com/xiph/opus) 1.5.2 (BSD-3-Clause), [Mbed TLS](https://github.com/Mbed-TLS/mbedtls) 2.28.10 (Apache-2.0 or GPL-2.0-or-later), and [protobuf-c](https://github.com/protobuf-c/protobuf-c) 1.5.2 (BSD-2-Clause). See the upstream sources for license terms.
+- The package includes helper modules from [OpenOrbis 0.5.4](https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/tree/v0.5.4).
+- References for the PS4 hardware decoder ABI include [Moonlight DX PS4](https://git.fourletterworkshop.com/moonlight-dx-ps4/blob/main/src/moonlight/VideoDecoder.cpp) and [shadPS4](https://github.com/shadps4-emu/shadPS4/blob/main/src/core/libraries/videodec/videodec2.h).
+- The UI uses the public domain [font8x8](https://github.com/dhepper/font8x8) font. This project is unaffiliated with Valve or Sony.
