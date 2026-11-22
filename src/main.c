@@ -204,7 +204,7 @@ static bool save_profile(unsigned profile)
     return false;
 }
 
-static bool request_stream(IHS_Client *client, const IHS_HostInfo *host, const StreamProfile *profile)
+static bool request_stream(IHS_Client *client, const IHS_HostInfo *host, const StreamProfile *profile, bool desktop)
 {
     const IHS_StreamingRequest request = {
         .streamingEnable = { true, true, true },
@@ -212,7 +212,8 @@ static bool request_stream(IHS_Client *client, const IHS_HostInfo *host, const S
         .maxFramerateNumerator = (int)profile->fps,
         .maxFramerateDenominator = 1,
         .audioChannelCount = 2,
-        .streamingInterface = IHS_StreamInterfaceBigPicture,
+        .streamingInterface = desktop ? IHS_StreamInterfaceDesktop : IHS_StreamInterfaceBigPicture,
+        .streamDesktop = desktop,
         .gamepadCount = gamepad_prepare_stream()
     };
     return IHS_ClientStreamingRequest(client, host, &request);
@@ -386,7 +387,8 @@ static void calibrate_screen(ScreenArea *area, bool live, uint32_t buttons)
 }
 
 static const char *play(const IHS_ClientConfig *config, const IHS_SessionInfo *info,
-                        const char *name, ScreenArea *area, StreamProfile profile)
+                        const char *name, ScreenArea *area, StreamProfile profile,
+                        bool desktop, bool *switch_mode)
 {
     static const IHS_StreamSessionCallbacks callbacks = {
         .configuring = configuring, .connected = connected, .finalized = finalized
@@ -430,6 +432,9 @@ static const char *play(const IHS_ClientConfig *config, const IHS_SessionInfo *i
     MediaVideoStatus sample_start = {0}, hud_start = {0};
     uint64_t hud_started = started_at;
     char hud[96] = "Measuring stream FPS...";
+    GamepadPointer pointer = {0};
+    bool controls_open = false;
+    uint64_t gesture_since = 0, next_controls_draw = 0;
     uint32_t previous = gamepad_buttons();
     while (!atomic_load(&session_done)) {
         const uint64_t hud_now = sceKernelGetProcessTime();
@@ -444,11 +449,11 @@ static const char *play(const IHS_ClientConfig *config, const IHS_SessionInfo *i
                      (unsigned)((status.submitted - hud_start.submitted) * UINT64_C(1000000) / elapsed),
                      status.average_decode_us, status.average_render_us,
                      startup_log_available() ? "open" : "failed");
+            if (status.decoded == hud_start.decoded) redraw |= got_video;
             hud_start = status;
             hud_started = hud_now;
-            redraw = got_video;
         }
-        if (media_present(*area, NULL, redraw, hud)) {
+        if (!controls_open && media_present(*area, NULL, redraw, hud)) {
             if (!got_video && !stopping) {
                 playback_started = sceKernelGetProcessTime();
                 playback_start = media_video_status();
@@ -459,26 +464,54 @@ static const char *play(const IHS_ClientConfig *config, const IHS_SessionInfo *i
         const uint64_t now = sceKernelGetProcessTime();
         const uint32_t buttons = gamepad_buttons(), pressed = buttons & ~previous;
         previous = buttons;
-        if (local_input && buttons == 0) {
+        if (local_input && !controls_open && buttons == 0) {
             gamepad_set_local(false);
             local_input = false;
         }
-        if (!stopping && got_video && (buttons & GAMEPAD_SCREEN) == GAMEPAD_SCREEN &&
+        const bool gesture = gamepad_pointer_poll(&pointer, session, got_video && !stopping &&
+                                                  !controls_open && !local_input);
+        if (!gesture) gesture_since = 0;
+        else if (!gesture_since) gesture_since = now;
+        else if (now - gesture_since >= UINT64_C(650000)) {
+            controls_open = true;
+            local_input = true;
+            gamepad_set_local(true);
+            next_controls_draw = 0;
+        }
+        if (controls_open && !stopping) {
+            if (pressed & ORBIS_PAD_BUTTON_CIRCLE) {
+                controls_open = false;
+                redraw = true;
+            } else if (pressed & ORBIS_PAD_BUTTON_TRIANGLE) {
+                *switch_mode = true;
+            }
+            if (controls_open && now >= next_controls_draw) {
+                screen_menu("Stream controls", name,
+                    desktop ? "CIRCLE Resume   CROSS Disconnect   TRIANGLE Switch to Big Picture" :
+                              "CIRCLE Resume   CROSS Disconnect   TRIANGLE Switch to Desktop");
+                next_controls_draw = now + 80000;
+            }
+        }
+        if (!stopping && got_video && !controls_open && (buttons & GAMEPAD_SCREEN) == GAMEPAD_SCREEN &&
             (pressed & GAMEPAD_SCREEN)) {
             gamepad_set_local(true);
             local_input = true;
+            gamepad_pointer_release(&pointer, session);
             calibrate_screen(area, true, buttons);
             previous = gamepad_buttons();
             redraw = true;
             continue;
         }
-        const bool wants_close = (buttons & GAMEPAD_EXIT) == GAMEPAD_EXIT ||
+        const bool wants_close = *switch_mode ||
+                                 (controls_open && (pressed & ORBIS_PAD_BUTTON_CROSS)) ||
+                                 (buttons & GAMEPAD_EXIT) == GAMEPAD_EXIT ||
                                  (!got_video && (pressed & ORBIS_PAD_BUTTON_CIRCLE));
         if (!stopping && (wants_close || (!got_video && now - started_at > 20000000))) {
             cancelled = wants_close;
             stopping = true;
             playback_stopped = now;
             playback_end = media_video_status();
+            gamepad_pointer_release(&pointer, session);
             IHS_SessionDisconnect(session);
         }
         if (got_video && !stopping) {
@@ -494,7 +527,7 @@ static const char *play(const IHS_ClientConfig *config, const IHS_SessionInfo *i
         }
         if (!got_video && now >= menu_update) {
             MediaVideoStatus video = media_video_status();
-            screen_menu(stopping ? "Closing session" : "Opening Big Picture", name,
+            screen_menu(stopping ? "Closing session" : desktop ? "Opening Desktop" : "Opening Big Picture", name,
                         video.received ? "Decoding video. CIRCLE cancels." :
                         atomic_load(&session_connected) ? "Waiting for video. CIRCLE cancels." :
                         "Connecting to the Steam stream. CIRCLE cancels.");
@@ -539,6 +572,7 @@ static void menu(IHS_Client *client, const IHS_ClientConfig *config)
     ScreenArea area = screen_area_load();
     unsigned video_profile = load_profile();
     unsigned selected = 0, tab = 0;
+    bool desktop = false;
     char host_names[MAX_HOSTS][64];
     uint32_t previous = gamepad_buttons();
     uint64_t next_draw = 0, deadline = 0;
@@ -623,7 +657,7 @@ static void menu(IHS_Client *client, const IHS_ClientConfig *config)
                     }
                 } else {
                     IHS_ClientSetSecretKey(client, paired.secret);
-                    if (request_stream(client, &target, &profiles[video_profile])) {
+                    if (request_stream(client, &target, &profiles[video_profile], desktop)) {
                         startup_log_step("Steam stream requested");
                         phase = REQUESTING;
                         deadline = now + 30000000;
@@ -637,12 +671,23 @@ static void menu(IHS_Client *client, const IHS_ClientConfig *config)
             info.steamId = paired.steam_id;
             IHS_ClientConfig session_config = *config;
             session_config.secretKey = paired.secret;
-            const char *stream_status = play(&session_config, &info, target.hostname, &area, profiles[video_profile]);
+            bool switch_mode = false;
+            const char *stream_status = play(&session_config, &info, target.hostname, &area,
+                                             profiles[video_profile], desktop, &switch_mode);
             memset(&info, 0, sizeof(info));
             snprintf(status, sizeof(status), "%s", stream_status);
             phase = BROWSING;
             next_draw = 0;
             previous = gamepad_buttons();
+            if (switch_mode) {
+                desktop = !desktop;
+                if (request_stream(client, &target, &profiles[video_profile], desktop)) {
+                    phase = REQUESTING;
+                    deadline = sceKernelGetProcessTime() + 30000000;
+                } else {
+                    snprintf(status, sizeof(status), "Mode changed. Press CROSS to reconnect.");
+                }
+            }
         } else if (received == EVENT_STREAM_FAILED && phase == REQUESTING) {
             startup_log_result("Steam stream response", result);
             if (result == IHS_StreamingUnauthorized) {
@@ -667,7 +712,7 @@ static void menu(IHS_Client *client, const IHS_ClientConfig *config)
                 startup_log_step("Steam pairing accepted");
                 bool saved = save_pairing(target.clientId, &paired);
                 startup_log_result("Save Steam pairing", saved ? 0 : -1);
-                if (request_stream(client, &target, &profiles[video_profile])) {
+                if (request_stream(client, &target, &profiles[video_profile], desktop)) {
                     startup_log_step("Steam stream requested after pairing");
                     phase = REQUESTING;
                     deadline = now + 30000000;

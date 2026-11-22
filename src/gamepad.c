@@ -143,6 +143,7 @@ static PadReport current_report(unsigned slot)
     uint32_t buttons = state.buttons;
     if (slot == 0 && (buttons & GAMEPAD_EXIT) == GAMEPAD_EXIT) buttons &= ~GAMEPAD_EXIT;
     if (slot == 0 && (buttons & GAMEPAD_SCREEN) == GAMEPAD_SCREEN) buttons &= ~GAMEPAD_SCREEN;
+    if (slot == 0) buttons &= ~ORBIS_PAD_BUTTON_TOUCH_PAD;
     for (unsigned i = 0; i < sizeof(map) / sizeof(map[0]); ++i) {
         if (buttons & map[i]) report.buttons |= 1u << i;
     }
@@ -309,4 +310,43 @@ void gamepad_attach(IHS_Session *session)
     };
     static IHS_HIDProvider provider = { .cls = &cls };
     IHS_SessionHIDAddProvider(session, &provider);
+}
+
+void gamepad_pointer_release(GamepadPointer *pointer, IHS_Session *session)
+{
+    if (pointer->down && IHS_SessionSendMouseUp(session, IHS_MOUSE_BUTTON_LEFT))
+        pointer->down = false;
+    pointer->tracking = false;
+}
+
+bool gamepad_pointer_poll(GamepadPointer *pointer, IHS_Session *session, bool enabled)
+{
+    const OrbisPadData pad = read_pad(0);
+    const bool two_fingers = pad.touch.fingers == 2 &&
+                             !(pad.buttons & ORBIS_PAD_BUTTON_TOUCH_PAD);
+    if (!enabled || !pad.connected || two_fingers || (pad.buttons & ORBIS_PAD_BUTTON_OPTIONS)) {
+        gamepad_pointer_release(pointer, session);
+        return enabled && two_fingers;
+    }
+    const bool click = (pad.buttons & ORBIS_PAD_BUTTON_TOUCH_PAD) != 0;
+    if (click != pointer->down) {
+        const bool sent = click ? IHS_SessionSendMouseDown(session, IHS_MOUSE_BUTTON_LEFT) :
+                                  IHS_SessionSendMouseUp(session, IHS_MOUSE_BUTTON_LEFT);
+        if (sent) pointer->down = click;
+    }
+    if (pad.touch.fingers != 1) {
+        pointer->tracking = false;
+        return false;
+    }
+    const OrbisPadTouch point = pad.touch.touch[0];
+    if (pointer->tracking && pointer->finger == point.finger) {
+        const int dx = (int)point.x - pointer->x, dy = (int)point.y - pointer->y;
+        if ((dx || dy) && dx > -256 && dx < 256 && dy > -256 && dy < 256)
+            IHS_SessionSendMouseMovement(session, dx, dy);
+    }
+    pointer->x = point.x;
+    pointer->y = point.y;
+    pointer->finger = point.finger;
+    pointer->tracking = true;
+    return false;
 }

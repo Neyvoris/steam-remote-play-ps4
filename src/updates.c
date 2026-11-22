@@ -66,7 +66,7 @@ static bool read_release_tag(const char *headers, size_t size, unsigned version[
 
 typedef struct { int net, ssl, http, tmpl, conn, req; } UpdateHttp;
 static unsigned available[3];
-static const unsigned installed[] = {0, 2, 6};
+static const unsigned installed[] = {0, 2, 7};
 static const char download_base[] =
     "https://github.com/ivanopolo30-dot/steam-remote-play-ps4/releases/download/";
 static const char partial_path[] = "/data/steam-remote-ps4/update.part";
