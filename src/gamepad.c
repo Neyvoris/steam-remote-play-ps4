@@ -319,6 +319,13 @@ void gamepad_pointer_release(GamepadPointer *pointer, IHS_Session *session)
     pointer->tracking = false;
 }
 
+static float cursor_axis(float value)
+{
+    if (value < 0.0f) return 0.0f;
+    if (value > 0.999f) return 0.999f;
+    return value;
+}
+
 bool gamepad_pointer_poll(GamepadPointer *pointer, IHS_Session *session, bool enabled)
 {
     const OrbisPadData pad = read_pad(0);
@@ -329,7 +336,7 @@ bool gamepad_pointer_poll(GamepadPointer *pointer, IHS_Session *session, bool en
         return enabled && two_fingers;
     }
     const bool click = (pad.buttons & ORBIS_PAD_BUTTON_TOUCH_PAD) != 0;
-    if (click != pointer->down) {
+    if (click != pointer->down && (!click || pointer->visible)) {
         const bool sent = click ? IHS_SessionSendMouseDown(session, IHS_MOUSE_BUTTON_LEFT) :
                                   IHS_SessionSendMouseUp(session, IHS_MOUSE_BUTTON_LEFT);
         if (sent) pointer->down = click;
@@ -339,10 +346,22 @@ bool gamepad_pointer_poll(GamepadPointer *pointer, IHS_Session *session, bool en
         return false;
     }
     const OrbisPadTouch point = pad.touch.touch[0];
+    if (!pointer->visible && click &&
+        IHS_SessionSendMousePosition(session, pointer->cursor[0], pointer->cursor[1])) {
+        pointer->visible = true;
+        pointer->down = IHS_SessionSendMouseDown(session, IHS_MOUSE_BUTTON_LEFT);
+    }
     if (pointer->tracking && pointer->finger == point.finger) {
         const int dx = (int)point.x - pointer->x, dy = (int)point.y - pointer->y;
-        if ((dx || dy) && dx > -256 && dx < 256 && dy > -256 && dy < 256)
-            IHS_SessionSendMouseMovement(session, dx, dy);
+        if ((dx || dy) && dx > -256 && dx < 256 && dy > -256 && dy < 256) {
+            const float x = cursor_axis(pointer->cursor[0] + dx / 1920.0f);
+            const float y = cursor_axis(pointer->cursor[1] + dy / 1080.0f);
+            if (IHS_SessionSendMousePosition(session, x, y)) {
+                pointer->cursor[0] = x;
+                pointer->cursor[1] = y;
+                pointer->visible = true;
+            }
+        }
     }
     pointer->x = point.x;
     pointer->y = point.y;

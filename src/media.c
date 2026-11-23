@@ -306,7 +306,7 @@ static void save_image(AVFrame *source)
     pthread_mutex_unlock(&video_lock);
 }
 
-static void render_image(uint32_t *pixels, const AVFrame *source, ScreenArea area)
+static void render_image(uint32_t *pixels, const AVFrame *source, ScreenArea area, const float *cursor)
 {
     const int width = source->width, height = source->height;
     int output_width, output_height;
@@ -405,6 +405,20 @@ static void render_image(uint32_t *pixels, const AVFrame *source, ScreenArea are
             unsigned green = clip_byte((yy - 55 * u - 136 * v + 128) >> 8);
             unsigned blue = clip_byte((yy + 541 * u + 128) >> 8);
             dest[x] = 0xff000000u | blue << 16 | green << 8 | red;
+        }
+    }
+    if (cursor) {
+        const int x = scaled.left + (int)(cursor[0] * scaled_width);
+        const int y = scaled.top + (int)(cursor[1] * scaled_height);
+        /* Clip to the visible video, including in Fill mode. */
+        for (int dy = 0; dy < 20 && y + dy < y_end; ++dy) {
+            if (y + dy < y_start) continue;
+            const int edge = dy < 15 ? dy : 20 - dy;
+            for (int dx = 0; dx <= edge && x + dx < x_end; ++dx) {
+                if (x + dx < x_start) continue;
+                const bool outline = dx == 0 || dx == edge || dy == 19;
+                pixels[(y + dy) * output_width + x + dx] = outline ? 0xff000000u : 0xffffffffu;
+            }
         }
     }
 }
@@ -517,7 +531,7 @@ static IHS_StreamVideoSubmitResult video_submit(IHS_Session *session, const IHS_
     return result;
 }
 
-bool media_present(ScreenArea area, const ScreenCalibration *calibration, bool redraw, const char *diagnostics)
+bool media_present(ScreenArea area, const ScreenCalibration *calibration, bool redraw, const char *diagnostics, const float *cursor)
 {
     uint32_t *pixels = screen_pixels();
     if (!pixels) return false;
@@ -536,7 +550,7 @@ bool media_present(ScreenArea area, const ScreenCalibration *calibration, bool r
     IHS_FrameTicket *ticket = frame_pending ? frame_ticket(display_frame) : NULL;
     const uint64_t upload_start = ticket ? frame_clock_us() : 0;
     uint64_t start = sceKernelGetProcessTime();
-    render_image(render_buffer, display_frame, area);
+    render_image(render_buffer, display_frame, area, cursor);
     render_us += sceKernelGetProcessTime() - start;
     ++render_attempts;
     if (calibration) screen_calibration_overlay(render_buffer, calibration);

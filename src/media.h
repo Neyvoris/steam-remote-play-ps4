@@ -6,7 +6,7 @@
 enum { VIDEO_DECODER_THREADS = 3 };
 
 bool media_attach(IHS_Session *session, bool hardware);
-bool media_present(ScreenArea area, const ScreenCalibration *calibration, bool redraw, const char *diagnostics);
+bool media_present(ScreenArea area, const ScreenCalibration *calibration, bool redraw, const char *diagnostics, const float *cursor);
 void media_discard(void);
 
 typedef struct {

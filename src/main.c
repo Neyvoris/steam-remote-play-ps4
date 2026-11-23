@@ -380,7 +380,7 @@ static void calibrate_screen(ScreenArea *area, bool live, uint32_t buttons)
         }
         previous = buttons;
         redraw |= pressed != 0;
-        if (live ? media_present(calibration.area, &calibration, redraw, NULL) :
+        if (live ? media_present(calibration.area, &calibration, redraw, NULL, NULL) :
                    redraw && screen_calibration_preview(&calibration)) redraw = false;
         sceKernelUsleep(5000);
     }
@@ -432,7 +432,7 @@ static const char *play(const IHS_ClientConfig *config, const IHS_SessionInfo *i
     MediaVideoStatus sample_start = {0}, hud_start = {0};
     uint64_t hud_started = started_at;
     char hud[96] = "Measuring stream FPS...";
-    GamepadPointer pointer = {0};
+    GamepadPointer pointer = {.cursor = {0.5f, 0.5f}};
     bool controls_open = false;
     uint64_t gesture_since = 0, next_controls_draw = 0;
     uint32_t previous = gamepad_buttons();
@@ -453,7 +453,7 @@ static const char *play(const IHS_ClientConfig *config, const IHS_SessionInfo *i
             hud_start = status;
             hud_started = hud_now;
         }
-        if (!controls_open && media_present(*area, NULL, redraw, hud)) {
+        if (!controls_open && media_present(*area, NULL, redraw, hud, pointer.visible ? pointer.cursor : NULL)) {
             if (!got_video && !stopping) {
                 playback_started = sceKernelGetProcessTime();
                 playback_start = media_video_status();
@@ -468,8 +468,12 @@ static const char *play(const IHS_ClientConfig *config, const IHS_SessionInfo *i
             gamepad_set_local(false);
             local_input = false;
         }
+        const float old_x = pointer.cursor[0], old_y = pointer.cursor[1];
+        const bool cursor_was_visible = pointer.visible;
         const bool gesture = gamepad_pointer_poll(&pointer, session, got_video && !stopping &&
                                                   !controls_open && !local_input);
+        redraw |= cursor_was_visible != pointer.visible ||
+                  pointer.cursor[0] != old_x || pointer.cursor[1] != old_y;
         if (!gesture) gesture_since = 0;
         else if (!gesture_since) gesture_since = now;
         else if (now - gesture_since >= UINT64_C(650000)) {

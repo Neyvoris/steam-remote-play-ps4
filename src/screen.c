@@ -370,7 +370,7 @@ static void tv_shell(uint32_t *fb, unsigned tab, const char *footer)
         tv_text(fb, x[i], 29, 22, x[i] + 145, i == tab ? ink : muted, names[i]);
         if (i == tab) rect(fb, x[i], 64, i == 1 ? 110 : 75, 3, focus);
     }
-    tv_text(fb, 1115, 29, 20, 1226, muted, "PS4 0.2.7");
+    tv_text(fb, 1115, 29, 20, 1226, muted, "PS4 0.2.8");
     rect(fb, 54, 77, 1172, 1, 0xff65513f);
     rect(fb, 54, 651, 1172, 1, 0xff65513f);
     tv_text(fb, 54, 668, 19, 1226, muted, footer);
