@@ -38,4 +38,4 @@ target_compile_options(steam-remote-ps4.elf PRIVATE -Wall -Wextra)
 target_link_libraries(steam-remote-ps4.elf PRIVATE ihs crypto opus
     "${FFMPEG}/lib/libavcodec.a" "${FFMPEG}/lib/libavutil.a"
     -lSceNet -lSceVideoOut -lSceGnmDriver -lScePad -lSceUserService
-    -lSceSysmodule -lSceAudioOut -lSceHttp -lSceSsl -lSceAppInstUtil)
+    -lSceSysmodule -lSceAudioOut -lSceHttp -lSceSsl)

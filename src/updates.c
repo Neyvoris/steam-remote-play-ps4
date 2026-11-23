@@ -6,7 +6,9 @@
 #include <strings.h>
 #include <unistd.h>
 #include <mbedtls/sha256.h>
-#include <orbis/AppInstUtil.h>
+#include <errno.h>
+#include <stdlib.h>
+#include <sys/stat.h>
 #include <orbis/Net.h>
 #include <orbis/Ssl.h>
 /* OpenOrbis 0.5.4 exposes this SDK symbol as a placeholder. */
@@ -19,9 +21,9 @@ extern int32_t sceHttpSetResponseHeaderMaxSize(int32_t id, uint64_t size);
 #include "updates.h"
 
 static const char latest[] =
-    "https://github.com/ivanopolo30-dot/steam-remote-play-ps4/releases/latest";
+    "https://github.com/Neyvoris/steam-remote-play-ps4/releases/latest";
 static const char release_prefix[] =
-    "https://github.com/ivanopolo30-dot/steam-remote-play-ps4/releases/tag/v";
+    "https://github.com/Neyvoris/steam-remote-play-ps4/releases/tag/v";
 
 static bool read_release_tag(const char *headers, size_t size, unsigned version[3])
 {
@@ -68,9 +70,9 @@ typedef struct { int net, ssl, http, tmpl, conn, req; } UpdateHttp;
 static unsigned available[3];
 static const unsigned installed[] = {0, 2, 8};
 static const char download_base[] =
-    "https://github.com/ivanopolo30-dot/steam-remote-play-ps4/releases/download/";
-static const char partial_path[] = "/data/steam-remote-ps4/update.part";
-static const char pkg_path[] = "/data/steam-remote-ps4/update.pkg";
+    "https://github.com/Neyvoris/steam-remote-play-ps4/releases/download/";
+static const char pkg_dir[] = "/data/pkg";
+static const char content_id[] = "IV0000-SRPL00001_00-STEAMREMOTEPLAY4";
 
 static void close_request(UpdateHttp *h)
 {
@@ -148,7 +150,7 @@ void updates_check(char *message, size_t capacity)
         snprintf(message, capacity, "Update check failed (0x%08x).", (unsigned)rc);
     } else {
         snprintf(message, capacity, newer(available) ?
-                 "GitHub Latest: %u.%u.%u. Press SQUARE in Settings to install." :
+                 "GitHub Latest: %u.%u.%u. Press SQUARE to download." :
                  "GitHub Latest: %u.%u.%u. No newer update.",
                  available[0], available[1], available[2]);
     }
@@ -229,10 +231,17 @@ static bool read_checksum(UpdateHttp *h, const char *name, unsigned char digest[
     return true;
 }
 
-static bool save_package(UpdateHttp *h, const unsigned char expected[32])
+static bool save_package(UpdateHttp *h, const unsigned char expected[32], const char *destination)
 {
-    FILE *file = fopen(partial_path, "wb");
-    if (!file) return false;
+    char partial_path[] = "/data/pkg/.steam-remote-XXXXXX";
+    const int fd = mkstemp(partial_path);
+    if (fd < 0) return false;
+    FILE *file = fdopen(fd, "w+b");
+    if (!file) {
+        close(fd);
+        unlink(partial_path);
+        return false;
+    }
     unsigned char buffer[16384], digest[32];
     size_t total = 0;
     mbedtls_sha256_context hash;
@@ -249,19 +258,28 @@ static bool save_package(UpdateHttp *h, const unsigned char expected[32])
     if (ok) ok = total > 0 && mbedtls_sha256_finish_ret(&hash, digest) == 0 &&
                  memcmp(digest, expected, sizeof(digest)) == 0;
     mbedtls_sha256_free(&hash);
+    if (ok) {
+        unsigned char prefix[0x70];
+        static const unsigned char magic[] = {0x7f, 'C', 'N', 'T'};
+        ok = fseek(file, 0, SEEK_SET) == 0 &&
+             fread(prefix, 1, sizeof(prefix), file) == sizeof(prefix) &&
+             memcmp(prefix, magic, sizeof(magic)) == 0 &&
+             memcmp(prefix + 0x40, content_id, sizeof(content_id)) == 0 &&
+             fchmod(fd, 0644) == 0 && fsync(fd) == 0;
+    }
     if (fclose(file) != 0) ok = false;
-    if (ok) ok = rename(partial_path, pkg_path) == 0;
+    if (ok) ok = rename(partial_path, destination) == 0;
     if (!ok) unlink(partial_path);
     return ok;
 }
 
-bool updates_install(char *message, size_t capacity)
+bool updates_download(char *message, size_t capacity)
 {
     if (!newer(available)) {
         snprintf(message, capacity, "Check for a newer release with L1 first.");
         return false;
     }
-    char tag[24], name[64], title[32] = {0};
+    char tag[24], name[64], destination[96];
     snprintf(tag, sizeof(tag), "v%u.%u.%u", available[0], available[1], available[2]);
     snprintf(name, sizeof(name), "SteamRemotePlay-PS4-%s.pkg", tag + 1);
     UpdateHttp h;
@@ -273,26 +291,20 @@ bool updates_install(char *message, size_t capacity)
         snprintf(message, capacity, "Could not read the release checksum.");
         return false;
     }
-    ok = open_asset(&h, tag, name) && save_package(&h, expected);
+    if (mkdir(pkg_dir, 0755) != 0 && errno != EEXIST) {
+        close_http(&h);
+        snprintf(message, capacity, "Cannot create /data/pkg. Error %d.", errno);
+        return false;
+    }
+    snprintf(destination, sizeof(destination), "%s/%s", pkg_dir, name);
+    ok = open_asset(&h, tag, name) && save_package(&h, expected, destination);
     close_http(&h);
     if (!ok) {
-        snprintf(message, capacity, "Download failed or the package checksum did not match.");
+        snprintf(message, capacity, "Could not save a verified PKG in /data/pkg.");
         return false;
     }
 
-    int rc = sceSysmoduleLoadModuleInternal(ORBIS_SYSMODULE_INTERNAL_APP_INST_UTIL);
-    if (rc >= 0) rc = sceAppInstUtilInitialize();
-    if (rc >= 0) {
-        int32_t is_app = 0;
-        rc = sceAppInstUtilGetTitleIdFromPkg(pkg_path, title, &is_app);
-        if (rc >= 0 && (!is_app || memcmp(title, "SRPL00001", sizeof("SRPL00001")))) rc = -1;
-        if (rc >= 0) rc = sceAppInstUtilAppInstallPkg(pkg_path, NULL);
-        sceAppInstUtilTerminate();
-    }
-    startup_log_result("PS4 update installer result", rc);
-    if (rc < 0) {
-        snprintf(message, capacity, "Installer returned 0x%08x. Verified PKG kept.", (unsigned)rc);
-        return false;
-    }
+    startup_log_step("Verified update saved for GoldHEN Package Installer.");
+    snprintf(message, capacity, "PKG saved in /data/pkg. Exit, then open GoldHEN Package Installer.");
     return true;
 }

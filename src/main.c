@@ -620,8 +620,8 @@ static void menu(IHS_Client *client, const IHS_ClientConfig *config)
                 continue;
             }
             if (tab == 2 && (pressed & ORBIS_PAD_BUTTON_SQUARE)) {
-                screen_menu("Installing update", "", "Downloading and checking the package...");
-                if (updates_install(status, sizeof(status))) return;
+                screen_menu("Downloading update", "", "Downloading and checking the package...");
+                (void)updates_download(status, sizeof(status));
                 next_draw = 0;
                 continue;
             }
